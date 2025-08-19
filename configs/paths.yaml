@@ -1,0 +1,22 @@
+# configs/paths.yaml
+external_data_root: /data/data_raw
+edaic:
+  root: ${external_data_root}/eDAIC
+  labels: ${edaic.root}/labels
+  features:
+    openface: ${edaic.root}/features/OpenFace2.1.0_Pose_gaze_AUs
+    egemaps:  ${edaic.root}/features/OpenSMILE2.3.0_egemaps
+    vgg16:    ${edaic.root}/features/vgg16
+daic:
+  root: ${external_data_root}/DAIC_WOZ
+  transcripts: ${daic.root}/TRANSCRIPTS
+  openface:
+    aus:  ${daic.root}/CLNF_AUs
+    gaze: ${daic.root}/CLNF_gaze
+    pose: ${daic.root}/CLNF_pose
+    lms2d: ${daic.root}/CLNF_features.txt   # 있으면 사용
+dvlog:
+  root: ${external_data_root}/DVLOG
+  acoustic_npy: ${dvlog.root}/acoustic.npy
+  visual_npy:   ${dvlog.root}/visual.npy
+cache_root: /data/cache   # 윈도 캐시 저장 경로

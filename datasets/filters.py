@@ -1,0 +1,1 @@
+#ellie 제거(daic transcript 기반)
