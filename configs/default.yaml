@@ -1,0 +1,70 @@
+# configs/default.yaml
+experiment: "multidomain_kd_crossattn"
+seed: 42
+
+paths:
+  raw_root: "${env:DATA_RAW_ROOT,/mnt/data_raw}"   # 리포 외부
+  processed_root: "./data/processed"
+  logs_root: "./runs"
+
+data:
+  sample_rate_hz: 16000
+  window_sec: 3.0
+  hop_sec: 1.5
+  lld_dim: 25           # eGeMAPS 25 LLD
+  lmk_dim: 136          # 68x2
+  pad_to_windows: true
+  drop_ellie: true      # 300-492에서만 적용(가능할 때)
+  datasets:
+    edaic:
+      use: true
+      split_dir: "${paths.raw_root}/E-DAIC/labels"     # train/dev/test csvs (PHQ_Binary 등)
+      audio_csv_dir: "${paths.raw_root}/E-DAIC/features/OpenSMILE/"
+      openface_csv_dir: "${paths.raw_root}/E-DAIC/features/OpenFace/"
+      vgg_dir: "${paths.raw_root}/E-DAIC/features/VGG/"
+    daic:
+      use: true
+      wav_dir: "${paths.raw_root}/DAIC-WOZ/Audio"
+      clnf_dir: "${paths.raw_root}/DAIC-WOZ/CLNF"
+      covarep_dir: "${paths.raw_root}/DAIC-WOZ/COVAREP"   # 교사용
+      formant_dir: "${paths.raw_root}/DAIC-WOZ/FORMANT"   # 교사용
+      transcript_dir: "${paths.raw_root}/DAIC-WOZ/TRANSCRIPT" # Ellie mask에 사용(있을 때)
+    dvlog:
+      use: true
+      meta_csv: "${paths.raw_root}/D-VLOG/dvlog_meta.csv"  # columns: id,label,fold,gender,duration
+      npy_root: "${paths.raw_root}/D-VLOG/npy"             # id/{acoustic.npy, visual.npy}
+
+training:
+  batch_size: 8
+  num_workers: 4
+  max_epochs: 40
+  lr: 2.0e-4
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+
+model:
+  audio_encoder: "lstm"     # "pase" 사용 시 pase_ckpt 지정
+  pase_ckpt: ""
+  lmk_encoder: "cnn_lstm"
+  hidden: 256
+  cross_attn_heads: 4
+  dropout: 0.2
+
+losses:
+  task:
+    bce_pos_weight: 1.5
+    phq_lambda: 0.3
+  kd:
+    use: true
+    temp: 3.0
+    alpha: 0.7
+  da:
+    use_grl: true
+    grl_lambda: 0.1
+    use_mmd: true
+    mmd_lambda: 0.1
+
+eval:
+  metric: "auroc"
+  average: "macro"
+  threshold: 0.5
