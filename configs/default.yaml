@@ -1,6 +1,6 @@
 # configs/default.yaml
 paths:
-  raw_root: /ABSOLUTE/PATH/TO/data_raw        # 원본 보관(다른 드라이브 추천)
+  raw_root: C:/Users/user/Documents/data_raw      # 원본 보관(다른 드라이브 추천)
   e_daic:
     audio_dir: ${paths.raw_root}/E-DAIC/Audio
     transcript_dir: ${paths.raw_root}/E-DAIC/Transcript
