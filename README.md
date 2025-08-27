@@ -20,13 +20,19 @@ Model supports **teacher-student training** with **domain adaption** and **expla
 ## Setup
 
 ### 1. clone repo
-bash
+```
 git clone https://github.com/chanhk22/depression_diagnosis.git
 cd depression_diagnosis
+```
+### 2. Install requirements
+```
+pip install -r requirements.txt
+```
 
-If using PASE+ , install from tis official repo:
-
+If using **PASE+** , install from official repo:
+```
 git clone https://github.com/santi-pdp/pase.git
+```
 
 ## Pipeline
 
@@ -38,15 +44,15 @@ bash scripts/1_preprocess_audio.sh
 ```
 
 ### step 2. Extract features
-+ Re-extract eGeMAPS (25 LLD) for DAIC/E-DAIC audio files.
-+ Extract PASE+ (optional)
++ Re-extract **eGeMAPS (25 LLD)** for DAIC/E-DAIC audio files.
++ Extract **PASE+** (optional)
 ```
 bash scripts/2_extract_features.sh
 ```
 
 ### step 3. Build cache
 + Window segmentation ( fixed length, stride)
-+ Saves .npz files + *_index.csv
++ Saves ```.npz``` files + ```*_index.csv```
 ```
 bash scripts/3_build_cache.sh
 ```
@@ -72,15 +78,15 @@ bash scripts/6_run_shap.sh
 ```
 
 ## Features
-+ Audio : eGeMAPS (25 LLD), MFCC , PASE+(optional)
-+ Visual : CLNF/OpenFace landmarks, CNN(VGG16/DenseNet201) features
-+ Fusion : cross-attention + domain adaption (MMD/GRL)
-+ Explainability : SHAP + landmark heatmaps
++ **Audio** : eGeMAPS (25 LLD), MFCC , PASE+(optional)
++ **Visual** : CLNF/OpenFace landmarks, CNN(VGG16/DenseNet201) features
++ **Fusion** : cross-attention + domain adaption (MMD/GRL)
++ **Explainability** : SHAP + landmark heatmaps
 
 ## Losses
-+ Knowledge Distillation (KD)
-+ Maximum Mean Discrepancy (MMD) for domain adaption
-+ Multitask Loss (classification + regression)
++ **Knowledge Distillation (KD)**
++ **Maximum Mean Discrepancy (MMD)** for domain adaption
++ **Multitask Loss** (classification + regression)
 
 ## Results
 
