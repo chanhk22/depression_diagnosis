@@ -33,37 +33,43 @@ git clone https://github.com/santi-pdp/pase.git
 ### Step 1. Preprocess audio
 + Cut Ellie's speech
 + Masks silence (VAD)
-
+```
 bash scripts/1_preprocess_audio.sh
+```
 
 ### step 2. Extract features
 + Re-extract eGeMAPS (25 LLD) for DAIC/E-DAIC audio files.
 + Extract PASE+ (optional)
-
+```
 bash scripts/2_extract_features.sh
+```
 
 ### step 3. Build cache
 + Window segmentation ( fixed length, stride)
 + Saves .npz files + *_index.csv
-
+```
 bash scripts/3_build_cache.sh
+```
 
 ### step 4. Train Teacher
 + Teacher model (audio + privileged modalities)
-
+```
 bash scripts/4_train_teacher.sh
+```
 
 ### step 5. Train Student
 + Student model (audio only or audio + landmarks)
 + Knowledge Distillation from teacher
-
+```
 bash scripts/5_train_student.sh
+```
 
 ### step 6. Explainability
 + Compute SHAP values
 + Plot top-k important features (e.g. landmarks, LLDs)
-
+```
 bash scripts/6_run_shap.sh
+```
 
 ## Features
 + Audio : eGeMAPS (25 LLD), MFCC , PASE+(optional)
@@ -79,7 +85,7 @@ bash scripts/6_run_shap.sh
 ## Results
 
 
-## Notes
+## 📜 Notes
 + contain original datasets in data_raw/
 + data/processed , data/cache generates during preprocessing
 + set paths and hyperparameter in configs/
