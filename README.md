@@ -92,9 +92,9 @@ bash scripts/6_run_shap.sh
 
 
 ## 📜 Notes
-+ contain original datasets in data_raw/
-+ data/processed , data/cache generates during preprocessing
-+ set paths and hyperparameter in configs/
++ contain original datasets in ```data_raw/```
++ ```data/processed/``` , ```data/cache/``` generates during preprocessing
++ set paths and hyperparameter in ```configs/```
 
 
 ## 📜 Citation
