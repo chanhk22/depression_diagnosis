@@ -1,14 +1,24 @@
+import torch, torch.nn as nn
+from .fusion_blocks import CrossAttention
 
-
-class StudentModel(nn.Module):
-    def __init__(self, audio_dim=25, lmk_dim=136, hid=256):
+class Student(nn.Module):
+    def __init__(self, cfg):
         super().__init__()
-        self.aenc = AudioEncoder(audio_dim, hid)
-        self.venc = LandmarkEncoder(lmk_dim, hid)
-        self.fuse = CrossAttentionFusion(hid)
-        self.cls = nn.Linear(hid*2, 1)
-        self.reg = nn.Linear(hid*2, 1)
-    def forward(self, audio, visual):
-        A = self.aenc(audio); V = self.venc(visual)
-        fused = self.fuse(A, V)
-        return self.cls(fused).squeeze(-1), self.reg(fused).squeeze(-1), fused
+        h = cfg["hidden"]; L = cfg["lstm_layers"]; H = cfg["attn_heads"]; dp = cfg["dropout"]
+        self.use_landmarks = cfg.get("use_landmarks", False)
+        self.audio_enc = nn.LSTM(cfg["audio_dim"], h, L, batch_first=True, bidirectional=True, dropout=dp)
+        if self.use_landmarks:
+            self.vis_enc = nn.LSTM(cfg["vis_dim"], h, L, batch_first=True, bidirectional=True, dropout=dp)
+            self.cross_a_v = CrossAttention(h*2, heads=H, dropout=dp)
+        self.out_bin = nn.Linear(h*2, 1)
+        self.out_reg = nn.Linear(h*2, 1)
+
+    def forward(self, audio, vis=None):
+        Ha = self.audio_enc(audio)[0]
+        if self.use_landmarks and vis is not None:
+            Hv = self.vis_enc(vis)[0]
+            Ha = self.cross_a_v(Ha, Hv)
+        h = Ha.mean(1)
+        yb = torch.sigmoid(self.out_bin(h))
+        yr = self.out_reg(h)
+        return yb, yr, h

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# scripts/05_train_student.sh
 set -e
-CFG=configs/default.yaml
-python -u training/train_student.py --config ${CFG} 2>&1 | tee logs/train_student.log
+python -u training/train_student.py \
+  --model_cfg configs/model.yaml \
+  --train_cfg configs/training.yaml \
+  --teacher_ckpt models/checkpoints/teacher_best.pth \
+  --train_index data/cache/daic_edaic_train_index.csv \
+  --val_index   data/cache/daic_edaic_val_index.csv \
+  --ckpt models/checkpoints/student_best.pth

@@ -11,10 +11,22 @@ paths:
     features_dir: ${paths.raw_root}/DAIC-WOZ/Features # CLNF, COVAREP
   dvlog:
     root: ${paths.raw_root}/D-VLOG
+    acoustic: ${paths.raw_root}/D-VLOG/acoustic    # or dir
+    visual:   ${paths.raw_root}/D-VLOG/visual     # or dir
+    labels:   ${paths.raw_root}/D-VLOG/labels.csv
 
 outputs:
   processed_root: ./data/processed               # 트림/마스킹 반영본
   cache_root: ./data/cache                       # 윈도 캐시(.npz)와 index.csv
+
+modalities:
+  use_audio: true
+  use_landmarks: true
+  use_privileged: true
+  privileged:
+    use_cnn_vgg16: true
+    use_cnn_densenet201: true
+    use_openface_pose_gaze_aus: true
 
 preprocessing:
   strategy: cut_head_mask_rest                   # "앞부분 컷 + 나머지는 마스크/드롭"
@@ -25,6 +37,13 @@ preprocessing:
     speech_ratio_threshold: 0.5                  # window_cache 단계에서 마스크 사용
   denoise:
     enabled: true                                # 물리적 감산(선택)
+  egemaps_25lld_reextract: true
+  normalize_landmarks: "zface"
+  dvlog_landmark_norm: "minmax"
+  resample:
+    audio_hz: 100  # eGeMAPS 25 LLD @ 10ms
+    vis_hz: 33.33  #openface ~30fps
+    cnn_hz: 1
 
 features:
   egemaps:
@@ -41,6 +60,9 @@ features:
 
 windowing:
   length_s: 4.0
+  hop_secs: 2.5
+  pad: "repeat"
+  min_valid_ratio : 0.6
   stride_s: 1.0
   base_rate_hz: 100   # 캐시 기준 시간해상도(오디오는 그대로, 다른 모달은 '윈도 내 모달별 시계열'로 저장)
 
@@ -48,3 +70,10 @@ labels:
   e_daic_labels_dir: ${paths.raw_root}/E-DAIC/labels
   daic_woz_labels_dir: ${paths.raw_root}/DAIC-WOZ/labels
   dvlog_labels_csv: ${paths.raw_root}/D-VLOG/labels.csv
+
+merge_policy:
+  prefer_daic_for_overlap: true    # 300–492 중복 세션 처리 규칙
+
+eval:
+  threshold: 0.5
+  metrics: ["acc","f1","precision","recall","auc","mse","mae","pearson"]

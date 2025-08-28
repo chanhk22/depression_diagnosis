@@ -15,6 +15,38 @@ def load_timeseries(csv_path, time_col_candidates=('frameTime','timestamp','time
     feats = df.select_dtypes(include=['number']).drop(columns=[tcol], errors='ignore')
     return t, feats.values, feats.columns.tolist()
 
+def normalize_landmarks(pts, method="interocular"):
+    """
+    pts: (T,68,2)
+    method: "interocular" (눈 거리로 정규화), "minmax"
+    """
+    if pts.ndim != 3 or pts.shape[1] != 68 or pts.shape[2] != 2:
+        return pts
+    if method == "interocular":
+        left_eye = np.mean(pts[:,36:42,:], axis=1)
+        right_eye = np.mean(pts[:,42:48,:], axis=1)
+        dist = np.linalg.norm(left_eye - right_eye, axis=1, keepdims=True)
+        dist[dist==0] = 1.0
+        pts = pts / dist[:,None,:]
+    elif method == "minmax":
+        min_xy = pts.min(axis=1, keepdims=True)
+        max_xy = pts.max(axis=1, keepdims=True)
+        rng = (max_xy - min_xy); rng[rng==0] = 1.0
+        pts = (pts - min_xy) / rng
+    return pts
+
+def process_landmarks(x, cols, source="clnf"):
+    """
+    CLNF: (x0..x67, y0..y67)
+    dlib: (x0,y0,x1,y1,...,x67,y67)
+    """
+    if source == "clnf":
+        pts = np.stack([x[:, :68], x[:, 68:]], axis=-1)  # (T,68,2)
+    else:  # dlib
+        pts = x.reshape(-1,68,2)
+    pts = normalize_landmarks(pts, method="interocular")
+    return pts
+
 def build_windows(session_id, modal_csvs, win_len=4.0, stride=1.0, out_dir="./data/cache/EDAIC"):
     """
     modal_csvs: dict 예)

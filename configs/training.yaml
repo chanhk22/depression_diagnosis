@@ -1,0 +1,22 @@
+train:
+  seed: 42
+  batch_size: 32
+  epochs: 40
+  lr: 2.0e-4
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+  num_workers: 4
+  mixed_precision: true
+
+loss_weights:
+  reg_lambda: 0.3
+  kd_lambda: 0.5
+  mmd_lambda: 0.5
+  grl_lambda: 0.5
+
+da:
+  use_mmd: true
+  use_grl: true
+
+kd:
+  T: 2.0

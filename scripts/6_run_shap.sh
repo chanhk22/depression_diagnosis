@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# scripts/06_run_shap.sh
 set -e
-CFG=configs/default.yaml
-python -u explain/run_shap.py --config ${CFG} 2>&1 | tee logs/run_shap.log
+python -u explain/shap_runner.py \
+  --model_ckpt models/checkpoints/student_adapted.pth \
+  --index_csv data/cache/daic_edaic_val_index.csv \
+  --out_dir data/shap
