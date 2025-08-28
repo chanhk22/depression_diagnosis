@@ -1,8 +1,4 @@
-'''핵심 아이디어: 동일 윈도를 정의하고, 각 모달은 자기 해상도로 그 윈도에 속하는 연속 시계열을 잘라 그대로 저장합니다. (나중 fusion에서 cross-attention 가능)
 
-오디오는 100Hz라 (L*100, 25)가 되겠지만, OpenFace는 (L*30, 53-메타) 처럼 길이가 다릅니다.
-
-중간 무음/엘리 구간은 여기서 VAD 마스크로 윈도 자체를 스킵하거나(학습시) 가중치 down할 수 있게 mask vector를 함께 저장합니다.'''
 
 # precache/window_cache.py
 import os, math, numpy as np, pandas as pd
@@ -76,5 +72,3 @@ def build_windows(session_id, modal_csvs, win_len=4.0, stride=1.0, out_dir="./da
     idx_path = os.path.join(out_dir, f"{session_id}_index.csv")
     idx.to_csv(idx_path, index=False)
     return idx_path
-'''위 캐시는 “시계열 그대로”를 윈도별로 저장합니다(샘플 수가 모달별로 달라도 됨).
-나중 교사 모델은 audio + *_priv 를 함께 쓰고, 학생은 audio만(or D-VLOG에서 audio+landmark) 씁니다.'''
