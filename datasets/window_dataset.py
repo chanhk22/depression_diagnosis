@@ -1,45 +1,40 @@
-#window_dataset.py
 import os, pandas as pd, numpy as np, torch
 from torch.utils.data import Dataset
 
 class WindowDataset(Dataset):
     """
-    index.csv columns:
-      path_audio, path_vis, path_priv_vgg, path_priv_densenet, path_priv_aus,
-      y_bin, y_reg, gender, session, dataset
+    index_csv produced by build_windows contains 'path' column pointing to per-window .npz
+    Each .npz may contain keys: audio, landmarks, mfcc, vgg, dense, ...
     """
-    def __init__(self, index_csv):
+    def __init__(self, index_csv, modal_keys=("audio","landmarks","mfcc","vgg","dense")):
         self.df = pd.read_csv(index_csv)
+        self.modal_keys = modal_keys
 
-    def __len__(self): 
+    def __len__(self):
         return len(self.df)
 
-    def _load_or_none(self, p):
-        return np.load(p, allow_pickle=True)["x"] if (isinstance(p, str) and os.path.exists(p)) else None
+    def __getitem__(self, idx):
+        r = self.df.iloc[idx]
+        p = r["path"]
+        if not os.path.exists(p):
+            raise FileNotFoundError(p)
+        npz = np.load(p, allow_pickle=True)
+        sample = {}
+        for k in self.modal_keys:
+            if k in npz:
+                val = npz[k]
+                # landmarks: if (win,68,2), flatten to (win,136) for model convenience
+                if k == "landmarks" and val is not None:
+                    arr = np.asarray(val)
+                    if arr.ndim == 3 and arr.shape[1]==68 and arr.shape[2]==2:
+                        arr = arr.reshape(arr.shape[0], -1)
+                    sample[k] = arr.astype(np.float32)
+                else:
+                    sample[k] = np.asarray(val).astype(np.float32)
+            else:
+                sample[k] = None
 
-    def __getitem__(self, i):
-        r = self.df.iloc[i]
-        data = np.load(r["path"], allow_pickle=True)
-
-        audio = data.get("audio")
-        landmarks = data.get("landmarks")
-        if landmarks is not None:
-            landmarks = landmarks.reshape(landmarks.shape[0], -1)  # (win,136)
-        
-        priv = {
-            "vgg":      self._load_or_none(r.get("path_priv_vgg")),
-            "densenet": self._load_or_none(r.get("path_priv_densenet")),
-            "aus":      self._load_or_none(r.get("path_priv_aus")),
-        }
-        return {
-            "audio": audio,
-            "vis": vis,
-            "priv": priv,
-            "y_bin": float(r["y_bin"]),
-            "y_reg": float(r["y_reg"]) if "y_reg" in r else 0.0,
-            "meta": {
-                "gender": r.get("gender",""),
-                "session": str(r.get("session","")),
-                "dataset": r.get("dataset",""),
-            }
-        }
+        sample['y_bin'] = float(r["y_bin"]) if "y_bin" in r and not pd.isna(r["y_bin"]) else None
+        sample['y_reg'] = float(r["y_reg"]) if "y_reg" in r and not pd.isna(r["y_reg"]) else None
+        sample['meta'] = {"session": r.get("session"), "t0": r.get("t0"), "t1": r.get("t1")}
+        return sample
