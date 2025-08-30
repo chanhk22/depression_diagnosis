@@ -1,35 +1,20 @@
-# D-VLOG 로더 (acoustic.npy + visual.npy)
+import os, pandas as pd
+from .base_dataset import BaseDataset
 
-# datasets/dvlog_dataset.py
-import os, numpy as np, pandas as pd
-from .base_dataset import BaseWindowDataset
+class DVLOGDataset(BaseDataset):
+    def __init__(self, split="train", config=None, label_type="binary"):
+        df = pd.read_csv(config["labels"]["dvlog"]["labels_csv"])
+        df = df[df["fold"] == split]
 
-def load_dvlog_labels(labels_csv):
-    df = pd.read_csv(labels_csv)
-    mapping = {}
-    # expect columns: id or filename, label (depression/normal or 0/1), duration, fold
-    for _, r in df.iterrows():
-        sid = str(r.get('id', r.get('participant', r.get('filename', r.get('session')))))
-        lab = {}
-        # try multiple column names
-        if 'label' in r.index:
-            v = r['label']
-            # convert string labels
-            if isinstance(v, str):
-                lab['label'] = 1 if v.lower().startswith('depress') else 0
-            else:
-                lab['label'] = int(v)
-        for c in ['PHQ_Binary','PHQ_Score','duration','gender','fold']:
-            if c in r.index:
-                lab[c] = r[c]
-        mapping[sid] = lab
-    return mapping
+        idx_dir = f"{config['outputs']['cache_root']}/D-VLOG"
+        index_csvs = [os.path.join(idx_dir, f) for f in os.listdir(idx_dir) if f.endswith("index.csv")]
+        all_idx = pd.concat([pd.read_csv(f) for f in index_csvs])
 
-class DvlogDataset(BaseWindowDataset):
-    def __init__(self, index_csv, dvlog_labels_csv=None, transform=None):
-        self.dv_labels = load_dvlog_labels(dvlog_labels_csv) if dvlog_labels_csv else {}
-        super().__init__(index_csv, label_map=self._label_map, transform=transform)
+        merged = all_idx.merge(df, left_on="session", right_on="index", how="inner")
+        merged["y_bin"] = (merged["label"] == "depression").astype(int)
+        merged["y_reg"] = 0.0   # DVLOG에는 점수 없음
 
-    def _label_map(self, session):
-        session = str(session)
-        return self.dv_labels.get(session, None)
+        index_csv = f"{idx_dir}/{split}_index.csv"
+        merged.to_csv(index_csv, index=False)
+
+        super().__init__(index_csv=index_csv, label_type=label_type)

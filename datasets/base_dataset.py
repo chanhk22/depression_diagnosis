@@ -1,38 +1,31 @@
 import torch
+from torch.utils.data import Dataset
 import numpy as np
+import pandas as pd
+import os
 
-GENDER_MAP = {"M":0, "F":1, "m":0, "f":1}
+class BaseDataset(Dataset):
+    def __init__(self, index_csv, label_type="binary"):
+        self.df = pd.read_csv(index_csv)
+        self.label_type = label_type
 
-def to_tensor(x, dtype=torch.float32):
-    if x is None: return None
-    if isinstance(x, np.ndarray): x = torch.from_numpy(x)
-    return x.to(dtype)
+    def __len__(self): return len(self.df)
 
-def default_collate_fn(batch):
-    # batch: list of dicts with keys: audio, vis, priv, y_bin, y_reg, meta
-    out = {}
-    keys = ["audio","vis"]
-    for k in keys:
-        xs = [b[k] for b in batch if b[k] is not None]
-        out[k] = torch.nn.utils.rnn.pad_sequence(
-            [to_tensor(x) for x in xs], batch_first=True, padding_value=0.0
-        ) if len(xs)>0 else None
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        data = dict(np.load(row["path"], allow_pickle=True))
 
-    # privileged (optional, time-agnostic 1Hz)
-    priv = {}
-    for pk in ["vgg","densenet","aus"]:
-        xs = [b["priv"].get(pk) for b in batch] if "priv" in batch[0] else []
-        xs = [to_tensor(x) for x in xs if x is not None]
-        priv[pk] = torch.stack(xs, dim=0) if xs else None
-    out["priv"] = priv
+        # label
+        if self.label_type == "binary":
+            y = float(row["y_bin"])
+        elif self.label_type == "regression":
+            y = float(row["y_reg"])
+        else:
+            raise ValueError(f"Unknown label_type {self.label_type}")
 
-    # labels
-    out["y_bin"] = torch.tensor([b["y_bin"] for b in batch], dtype=torch.float32).unsqueeze(1)
-    out["y_reg"] = torch.tensor([b["y_reg"] for b in batch], dtype=torch.float32).unsqueeze(1)
-
-    # meta (gender embedding, session, dataset)
-    genders = [GENDER_MAP.get(str(b["meta"].get("gender","")).strip(), -1) for b in batch]
-    out["gender"] = torch.tensor(genders, dtype=torch.int64)
-    out["session"] = [b["meta"].get("session") for b in batch]
-    out["dataset"] = [b["meta"].get("dataset") for b in batch]
-    return out
+        meta = {
+            "session": row.get("session", ""),
+            "dataset": row.get("dataset", ""),
+            "gender":  row.get("gender", ""),
+        }
+        return data, y, meta

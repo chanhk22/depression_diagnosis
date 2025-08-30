@@ -1,30 +1,20 @@
-# DAIC-WOZ 로더 (CLNF + COVAREP)
-
-# datasets/daic_dataset.py
 import os, pandas as pd
-from .base_dataset import BaseWindowDataset
+from .base_dataset import BaseDataset
 
-def load_daic_labels(labels_dir):
-    # DAIC label files might have Participant_ID, PHQ_Score, PHQ_Binary
-    mapping = {}
-    for fname in os.listdir(labels_dir):
-        if fname.lower().endswith('.csv'):
-            df = pd.read_csv(os.path.join(labels_dir,fname))
-            if 'Participant_ID' in df.columns:
-                for _, r in df.iterrows():
-                    sid = str(int(r['Participant_ID'])) if not pd.isna(r['Participant_ID']) else str(r['Participant_ID'])
-                    mapping[sid] = {}
-                    if 'PHQ_Binary' in r:
-                        mapping[sid]['label'] = int(r['PHQ_Binary'])
-                    if 'PHQ_Score' in r:
-                        mapping[sid]['phq_score'] = float(r['PHQ_Score'])
-    return mapping
+class DAICDataset(BaseDataset):
+    def __init__(self, split="train", config=None, label_type="binary"):
+        label_path = config["labels"]["daic_woz"][f"{split}_split"]
+        df = pd.read_csv(label_path)
 
-class DaicDataset(BaseWindowDataset):
-    def __init__(self, index_csv, labels_dir, transform=None):
-        self.labels = load_daic_labels(labels_dir)
-        super().__init__(index_csv, label_map=self._label_map, transform=transform)
+        # 여기서 index.csv 매칭 (cache 단계에서 만든 파일들)
+        index_csvs = [f for f in os.listdir(f"{config['outputs']['cache_root']}/DAIC-WOZ") if f.endswith("index.csv")]
+        all_idx = pd.concat([pd.read_csv(os.path.join(config['outputs']['cache_root'], "DAIC-WOZ", f)) for f in index_csvs])
+        
+        merged = all_idx.merge(df, left_on="session", right_on="Participant_ID", how="inner")
+        merged["y_bin"] = merged["PHQ8_Binary"]
+        merged["y_reg"] = merged["PHQ8_Score"]
 
-    def _label_map(self, session):
-        session = str(session)
-        return self.labels.get(session, None)
+        index_csv = f"{config['outputs']['cache_root']}/DAIC-WOZ/{split}_index.csv"
+        merged.to_csv(index_csv, index=False)
+
+        super().__init__(index_csv=index_csv, label_type=label_type)

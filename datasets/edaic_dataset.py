@@ -1,41 +1,20 @@
-# E-DAIC 로더 (멀티태스크: PHQ score + binary)
-
-# datasets/edaic_dataset.py
 import os, pandas as pd
-from .base_dataset import BaseWindowDataset, collate_windows
-from typing import Callable
+from .base_dataset import BaseDataset
 
-def load_labels_edaic(labels_dir):
-    """
-    labels_dir should contain split CSVs or label CSVs with columns: Participant_ID, gender, PHQ_Binary, PHQ_Score, ...
-    returns label_map: dict session-> {'label':int, 'phq_score':float}
-    """
-    mapping = {}
-    # try Detailed_PHQ8_Labels.csv first
-    for fname in os.listdir(labels_dir):
-        if 'labels' in fname.lower() or 'phq' in fname.lower():
-            p = os.path.join(labels_dir, fname)
-            try:
-                df = pd.read_csv(p)
-            except Exception:
-                continue
-            # heuristics to find columns
-            if 'Participant_ID' in df.columns and ('PHQ_Binary' in df.columns or 'PHQ_Score' in df.columns):
-                for _, r in df.iterrows():
-                    sid = str(int(r['Participant_ID'])) if not pd.isna(r['Participant_ID']) else str(r['Participant_ID'])
-                    lab = {}
-                    if 'PHQ_Binary' in r:
-                        lab['label'] = int(r.get('PHQ_Binary', 0))
-                    if 'PHQ_Score' in r:
-                        lab['phq_score'] = float(r.get('PHQ_Score', 0.0))
-                    mapping[sid] = lab
-    return mapping
+class EDAICDataset(BaseDataset):
+    def __init__(self, split="train", config=None, label_type="binary"):
+        label_path = config["labels"]["e_daic"][f"{split}_split"]
+        df = pd.read_csv(label_path)
 
-class EdaicDataset(BaseWindowDataset):
-    def __init__(self, index_csv, labels_dir, transform=None):
-        self.labels = load_labels_edaic(labels_dir)
-        super().__init__(index_csv, label_map=self._label_map, transform=transform)
+        idx_dir = f"{config['outputs']['cache_root']}/E-DAIC"
+        index_csvs = [os.path.join(idx_dir, f) for f in os.listdir(idx_dir) if f.endswith("index.csv")]
+        all_idx = pd.concat([pd.read_csv(f) for f in index_csvs])
 
-    def _label_map(self, session):
-        session = str(session)
-        return self.labels.get(session, None)
+        merged = all_idx.merge(df, left_on="session", right_on="Participant_ID", how="inner")
+        merged["y_bin"] = merged["PHQ_Binary"]
+        merged["y_reg"] = merged["PHQ_Score"]
+
+        index_csv = f"{idx_dir}/{split}_index.csv"
+        merged.to_csv(index_csv, index=False)
+
+        super().__init__(index_csv=index_csv, label_type=label_type)
