@@ -13,10 +13,13 @@ def main(args):
     tr  = yaml.safe_load(open(args.train_cfg))
 
     student = Student(cfg["student"]).to(device)
+
+    # load pretrained teacher
     teacher = Teacher(cfg["teacher"]).to(device).eval()
     td = torch.load(args.teacher_ckpt, map_location=device)
     teacher.load_state_dict(td["state_dict"])
-    for p in teacher.parameters(): p.requires_grad=False
+    for p in teacher.parameters(): 
+        p.requires_grad=False
 
     ds_tr = WindowDataset(args.train_index)
     ds_va = WindowDataset(args.val_index)
@@ -25,23 +28,27 @@ def main(args):
     dl_va = DataLoader(ds_va, batch_size=tr["train"]["batch_size"], shuffle=False,
                        num_workers=tr["train"]["num_workers"], collate_fn=default_collate_fn)
 
-    opt = torch.optim.AdamW(student.parameters(), lr=tr["train"]["lr"], weight_decay=tr["train"]["weight_decay"])
-    scaler = torch.cuda.amp.GradScaler(enabled=tr["train"].get("mixed_precision",True))
+    opt = torch.optim.AdamW(student.parameters(),
+                            lr=tr["train"]["lr"],
+                            weight_decay=tr["train"]["weight_decay"])
+    scaler = torch.cuda.amp.GradScaler(enabled=tr["train"].get("mixed_precision", True))
     best_f1 = -1
 
     for epoch in range(1, tr["train"]["epochs"]+1):
         student.train()
         for b in dl_tr:
             a = b["audio"].to(device)
-            v = b["vis"].to(device) if (b["vis"] is not None and getattr(student,"use_landmarks",False)) else None
+            v = b["vis"].to(device) if (b["vis"] is not None and getattr(student, "use_landmarks", False)) else None
             yb_t = b["y_bin"].to(device)
             yr_t = b["y_reg"].to(device)
 
-            with torch.cuda.amp.autocast(enabled=tr["train"].get("mixed_precision",True)):
-                # teacher signals
+            with torch.cuda.amp.autocast(enabled=tr["train"].get("mixed_precision", True)):
+                # teacher outputs (no priv in student setting)
                 with torch.no_grad():
-                    yb_T, yr_T, h_T = teacher(a, v=None, priv=None)   # teacher uses its own modalities in pretraining; here distill logits
+                    yb_T, yr_T, h_T = teacher(a, v=None, priv=None)
+
                 yb_S, yr_S, h_S = student(a, v)
+
                 l_mt, logs = multitask_loss(yb_S, yb_t, yr_S, yr_t, tr["loss_weights"]["reg_lambda"])
                 l_kd = kd_loss(yb_S, yb_T, tr["kd"]["T"])
                 loss = l_mt + tr["loss_weights"]["kd_lambda"] * l_kd
