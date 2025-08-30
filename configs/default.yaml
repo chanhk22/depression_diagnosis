@@ -1,23 +1,41 @@
-# configs/default.yaml
 paths:
-  raw_root: C:/Users/user/Documents/data_raw      # 원본 보관(다른 드라이브 추천)
-  e_daic:
-    audio_dir: ${paths.raw_root}/E-DAIC/Audio
-    transcript_dir: ${paths.raw_root}/E-DAIC/Transcript
-    features_dir: ${paths.raw_root}/E-DAIC/Features   # egemaps/mfcc/openface/vgg/densenet
+  raw_root: C:/Users/user/Documents/data_raw   # 원본 보관(수정 금지)
+
   daic_woz:
-    audio_dir: ${paths.raw_root}/DAIC-WOZ/Audio
     transcript_dir: ${paths.raw_root}/DAIC-WOZ/Transcript
-    features_dir: ${paths.raw_root}/DAIC-WOZ/Features # CLNF, COVAREP
+    features_dir:   ${paths.raw_root}/DAIC-WOZ/Features   # CLNF, COVAREP
+    labels_dir:     ${paths.raw_root}/DAIC-WOZ/labels
+
+  e_daic:
+    audio_dir:      ${paths.raw_root}/E-DAIC/Audio        # 모든 참가자 오디오(300~718 공용)
+    transcript_dir: ${paths.raw_root}/E-DAIC/Transcript   # 493 이후 transcript
+    features_dir:   ${paths.raw_root}/E-DAIC/Features     # MFCC/OpenFace/VGG16/DenseNet201
+    labels_dir:     ${paths.raw_root}/E-DAIC/labels
+
   dvlog:
-    root: ${paths.raw_root}/D-VLOG
-    acoustic: ${paths.raw_root}/D-VLOG/acoustic    # or dir
-    visual:   ${paths.raw_root}/D-VLOG/visual     # or dir
+    root:     ${paths.raw_root}/D-VLOG
+    acoustic: ${paths.raw_root}/D-VLOG/acoustic          # *.npy (25 LLD @100Hz)
+    visual:   ${paths.raw_root}/D-VLOG/visual            # *.npy (68*2 dlib)
     labels:   ${paths.raw_root}/D-VLOG/labels.csv
 
 outputs:
-  processed_root: ./data/processed               # 트림/마스킹 반영본
-  cache_root: ./data/cache                       # 윈도 캐시(.npz)와 index.csv
+  processed_root: ./data/processed                       # 전처리/정렬 반영본
+  cache_root:     ./data/cache                           # 윈도 캐시(.npz) + index.csv
+
+# processed 내부의 재추출/클린 경로(미러 구조 고정)
+processed:
+  daic_woz:
+    reegemaps25: ${outputs.processed_root}/DAIC-WOZ/ReEgemaps25LLD
+    features:    ${outputs.processed_root}/DAIC-WOZ/Features   # CLNF/COVAREP cleaned
+    transcript:  ${outputs.processed_root}/DAIC-WOZ/Transcript
+  e_daic:
+    reegemaps25: ${outputs.processed_root}/E-DAIC/ReEgemaps25LLD
+    features:    ${outputs.processed_root}/E-DAIC/Features     # MFCC/OpenFace/CNN cleaned
+    transcript:  ${outputs.processed_root}/E-DAIC/Transcript
+    audio:       ${outputs.processed_root}/E-DAIC/Audio        # (선택) denoise 결과
+  dvlog:
+    acoustic:    ${outputs.processed_root}/D-VLOG/acoustic     # (선택) 정규화본
+    visual:      ${outputs.processed_root}/D-VLOG/visual
 
 modalities:
   use_audio: true
@@ -27,30 +45,31 @@ modalities:
     use_cnn_vgg16: true
     use_cnn_densenet201: true
     use_openface_pose_gaze_aus: true
+    use_mfcc: true
 
 preprocessing:
-  strategy: cut_head_mask_rest                   # "앞부분 컷 + 나머지는 마스크/드롭"
+  strategy: cut_head_mask_rest                   # 앞부분 컷 + 나머지는 마스크/드롭
   ellie_regex: "(?i)hi\\s*i[' ]?m\\s*ellie"
   vad:
-    aggressiveness: 2                            # 0..3 (3이 가장 공격적) - 마스크용
-    frame_ms: 30                                 # VAD 판단 프레임 길이
-    speech_ratio_threshold: 0.5                  # window_cache 단계에서 마스크 사용
+    aggressiveness: 2
+    frame_ms: 30
+    speech_ratio_threshold: 0.5
   denoise:
-    enabled: true                                # 물리적 감산(선택)
+    enabled: true
   egemaps_25lld_reextract: true
-  normalize_landmarks: "zface"
-  dvlog_landmark_norm: "minmax"
+  normalize_landmarks: "zface"       # DAIC/E-DAIC -> zface norm
+  dvlog_landmark_norm: "minmax"      # D-VLOG -> min-max norm
   resample:
-    audio_hz: 100  # eGeMAPS 25 LLD @ 10ms
-    vis_hz: 33.33  #openface ~30fps
+    audio_hz: 100   # eGeMAPS 25 LLD @ 10ms
+    vis_hz: 33.33   # OpenFace ~30fps
     cnn_hz: 1
 
 features:
   egemaps:
-    use_clean_reextract: true                    # 트림 후 eGeMAPS LLD 재추출
+    use_clean_reextract: true
     target_hz: 100
   mfcc:
-    use_as_privileged: true                      # 교사 특권(프레임마스크만)
+    use_as_privileged: true
   openface:
     use_as_privileged: true
   vgg16:
@@ -60,20 +79,30 @@ features:
 
 windowing:
   length_s: 4.0
+  stride_s: 1.0
   hop_secs: 2.5
   pad: "repeat"
-  min_valid_ratio : 0.6
-  stride_s: 1.0
-  base_rate_hz: 100   # 캐시 기준 시간해상도(오디오는 그대로, 다른 모달은 '윈도 내 모달별 시계열'로 저장)
+  min_valid_ratio: 0.6
+  base_rate_hz: 100
 
 labels:
-  e_daic_labels_dir: ${paths.raw_root}/E-DAIC/labels
-  daic_woz_labels_dir: ${paths.raw_root}/DAIC-WOZ/labels
-  dvlog_labels_csv: ${paths.raw_root}/D-VLOG/labels.csv
+  daic_woz:
+    train_split: ${paths.daic_woz.labels_dir}/train_split_Depression_AVEC2017.csv
+    dev_split:   ${paths.daic_woz.labels_dir}/dev_split_Depression_AVEC2017.csv
+    test_split:  ${paths.daic_woz.labels_dir}/full_test_split.csv
+
+  e_daic:
+    train_split: ${paths.e_daic.labels_dir}/train_split.csv
+    dev_split:   ${paths.e_daic.labels_dir}/dev_split.csv
+    test_split:  ${paths.e_daic.labels_dir}/test_split.csv
+    detailed:    ${paths.e_daic.labels_dir}/Detailed_PHQ8_Labels.csv
+
+  dvlog:
+    labels_csv:  ${paths.dvlog.labels}
 
 merge_policy:
-  prefer_daic_for_overlap: true    # 300–492 중복 세션 처리 규칙
+  prefer_daic_for_overlap: true    # 300–492 overlap 해결
 
 eval:
   threshold: 0.5
-  metrics: ["acc","f1","precision","recall","auc","mse","mae","pearson"]
+  metrics: ["acc","f1_macro","f1_weighted","precision","recall","auc","mse","mae","pearson","spearman"]
