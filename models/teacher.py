@@ -6,10 +6,10 @@ class Teacher(nn.Module):
         super().__init__()
         h = cfg["hidden"]; L = cfg["lstm_layers"]; H = cfg["attn_heads"]; dp = cfg["dropout"]
         self.audio_enc = nn.LSTM(cfg["audio_dim"], h, L, batch_first=True, bidirectional=True, dropout=dp)
-        self.vis_enc   = nn.LSTM(cfg["vis_dim"],   h, L, batch_first=True, bidirectional=True, dropout=dp)
+        self.vis_enc   = nn.LSTM(cfg["landmarks_dim"],   h, L, batch_first=True, bidirectional=True, dropout=dp)
         self.vgg_fc    = nn.Linear(cfg["vgg_dim"], h*2)
         self.dense_fc  = nn.Linear(cfg["densenet_dim"], h*2)
-        self.aus_fc    = nn.Linear(cfg.get("aus_dim",35), h*2)
+        self.face_fc    = nn.Linear(cfg.get("face_feat_dim",49), h*2)
 
         self.cross_a_v = CrossAttention(h*2, heads=H, dropout=dp)
         self.cross_a_p = CrossAttention(h*2, heads=H, dropout=dp)

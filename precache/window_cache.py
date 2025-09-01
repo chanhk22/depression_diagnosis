@@ -334,7 +334,7 @@ def main():
     parser.add_argument("--dataset",choices=['DAIC-WOZ','E-DAIC','D-VLOG','all'],default='all')
     args=parser.parse_args()
 
-    with open(args.config) as f:
+    with open(args.config, "r", encoding="utf-8") as f:
         cfg=yaml.safe_load(f)
     builder=WindowCacheBuilder(cfg)
 
