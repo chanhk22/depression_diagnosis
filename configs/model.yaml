@@ -3,7 +3,7 @@ teacher:
   vis_dim: 136
   vgg_dim: 4096
   densenet_dim: 1920
-  aus_dim: 35                  # 예시(실제 OpenFace csv 기준으로 맞춰야 함)
+  face_feat_dim: 49                  # 예시(실제 OpenFace csv 기준으로 맞춰야 함)
   hidden: 128
   lstm_layers: 2
   attn_heads: 4
