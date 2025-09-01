@@ -2,21 +2,21 @@ paths:
   raw_root: C:/Users/user/Documents/data_raw   # 원본 보관(수정 금지)
 
   daic_woz:
-    transcript_dir: ${paths.raw_root}/DAIC-WOZ/Transcript
-    features_dir:   ${paths.raw_root}/DAIC-WOZ/Features   # CLNF, COVAREP
-    labels_dir:     ${paths.raw_root}/DAIC-WOZ/labels
+    transcript_dir: C:/Users/user/Documents/data_raw/DAIC-WOZ/Transcript
+    features_dir:   C:/Users/user/Documents/data_raw/DAIC-WOZ/Features   # CLNF, COVAREP
+    labels_dir:     C:/Users/user/Documents/data_raw/DAIC-WOZ/labels
 
   e_daic:
-    audio_dir:      ${paths.raw_root}/E-DAIC/Audio        # 모든 참가자 오디오(300~718 공용)
-    transcript_dir: ${paths.raw_root}/E-DAIC/Transcript   # 493 이후 transcript
-    features_dir:   ${paths.raw_root}/E-DAIC/Features     # MFCC/OpenFace/VGG16/DenseNet201
-    labels_dir:     ${paths.raw_root}/E-DAIC/labels
+    audio_dir:      C:/Users/user/Documents/data_raw/E-DAIC/Audio        # 모든 참가자 오디오(300~718 공용)
+    transcript_dir: C:/Users/user/Documents/data_raw/E-DAIC/Transcript   # 493 이후 transcript
+    features_dir:   C:/Users/user/Documents/data_raw/E-DAIC/Features     # MFCC/OpenFace/VGG16/DenseNet201
+    labels_dir:     C:/Users/user/Documents/data_raw/E-DAIC/labels
 
   dvlog:
-    root:     ${paths.raw_root}/D-VLOG
-    acoustic: ${paths.raw_root}/D-VLOG/acoustic          # *.npy (25 LLD @100Hz)
-    visual:   ${paths.raw_root}/D-VLOG/visual            # *.npy (68*2 dlib)
-    labels:   ${paths.raw_root}/D-VLOG/labels.csv
+    root:     C:/Users/user/Documents/data_raw/D-VLOG
+    acoustic: C:/Users/user/Documents/data_raw/D-VLOG/acoustic          # *.npy (25 LLD @100Hz)
+    visual:   C:/Users/user/Documents/data_raw/D-VLOG/visual            # *.npy (68*2 dlib)
+    labels:   C:/Users/user/Documents/data_raw/D-VLOG/labels.csv
 
 outputs:
   processed_root: ./data/processed                       # 전처리/정렬 반영본
@@ -25,17 +25,17 @@ outputs:
 # processed 내부의 재추출/클린 경로(미러 구조 고정)
 processed:
   daic_woz:
-    reegemaps25: ${outputs.processed_root}/DAIC-WOZ/ReEgemaps25LLD
-    features:    ${outputs.processed_root}/DAIC-WOZ/Features   # CLNF/COVAREP cleaned
-    transcript:  ${outputs.processed_root}/DAIC-WOZ/Transcript
+    reegemaps25: ./data/processed/DAIC-WOZ/ReEgemaps25LLD
+    features:    ./data/processed/DAIC-WOZ/Features   # CLNF/COVAREP cleaned
+    transcript:  ./data/processed/DAIC-WOZ/Transcript
   e_daic:
-    reegemaps25: ${outputs.processed_root}/E-DAIC/ReEgemaps25LLD
-    features:    ${outputs.processed_root}/E-DAIC/Features     # MFCC/OpenFace/CNN cleaned
-    transcript:  ${outputs.processed_root}/E-DAIC/Transcript
-    audio:       ${outputs.processed_root}/E-DAIC/Audio        # (선택) denoise 결과
+    reegemaps25: ./data/processed/E-DAIC/ReEgemaps25LLD
+    features:    ./data/processed/E-DAIC/Features     # MFCC/OpenFace/CNN cleaned
+    transcript:  ./data/processed/E-DAIC/Transcript
+    audio:       ./data/processed/E-DAIC/Audio        # (선택) denoise 결과
   dvlog:
-    acoustic:    ${outputs.processed_root}/D-VLOG/acoustic     # (선택) 정규화본
-    visual:      ${outputs.processed_root}/D-VLOG/visual
+    acoustic:    ./data/processed/D-VLOG/acoustic     # (선택) 정규화본
+    visual:      ./data/processed/D-VLOG/visual
 
 modalities:
   use_audio: true
@@ -87,18 +87,18 @@ windowing:
 
 labels:
   daic_woz:
-    train_split: ${paths.daic_woz.labels_dir}/train_split_Depression_AVEC2017.csv
-    dev_split:   ${paths.daic_woz.labels_dir}/dev_split_Depression_AVEC2017.csv
-    test_split:  ${paths.daic_woz.labels_dir}/full_test_split.csv
+    train_split: C:/Users/user/Documents/data_raw/DAIC-WOZ/labels/train_split_Depression_AVEC2017.csv
+    dev_split:   C:/Users/user/Documents/data_raw/DAIC-WOZ/labels/dev_split_Depression_AVEC2017.csv
+    test_split:  C:/Users/user/Documents/data_raw/DAIC-WOZ/labels/full_test_split.csv
 
   e_daic:
-    train_split: ${paths.e_daic.labels_dir}/train_split.csv
-    dev_split:   ${paths.e_daic.labels_dir}/dev_split.csv
-    test_split:  ${paths.e_daic.labels_dir}/test_split.csv
-    detailed:    ${paths.e_daic.labels_dir}/Detailed_PHQ8_Labels.csv
+    train_split: C:/Users/user/Documents/data_raw/E-DAIC/labels/train_split.csv
+    dev_split:   C:/Users/user/Documents/data_raw/E-DAIC/labels/dev_split.csv
+    test_split:  C:/Users/user/Documents/data_raw/E-DAIC/labels/test_split.csv
+    detailed:    C:/Users/user/Documents/data_raw/E-DAIC/labels/Detailed_PHQ8_Labels.csv
 
   dvlog:
-    labels_csv:  ${paths.dvlog.labels}
+    labels_csv:  C:/Users/user/Documents/data_raw/D-VLOG/labels.csv
 
 merge_policy:
   prefer_daic_for_overlap: true    # 300–492 overlap 해결
