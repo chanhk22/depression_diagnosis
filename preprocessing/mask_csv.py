@@ -1,4 +1,4 @@
-# preprocessing/mask_csv_by_transcript.py
+# preprocessing/mask_csv.py
 import os
 from .utils_io import read_table_smart
 
