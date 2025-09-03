@@ -42,20 +42,14 @@ modalities:
   use_landmarks: true
   use_privileged: true
   privileged:
-    use_cnn_vgg16: true
-    use_cnn_densenet201: true
+    use_vgg16: true
+    use_densenet201: true
     use_openface_pose_gaze_aus: true
     use_mfcc: true
 
 preprocessing:
   strategy: cut_head_mask_rest                   # 앞부분 컷 + 나머지는 마스크/드롭
   ellie_regex: "(?i)hi\\s*i[' ]?m\\s*ellie"
-  vad:
-    aggressiveness: 2
-    frame_ms: 30
-    speech_ratio_threshold: 0.5
-  denoise:
-    enabled: true
   egemaps_25lld_reextract: true
   normalize_landmarks: "zface"       # DAIC/E-DAIC -> zface norm
   dvlog_landmark_norm: "minmax"      # D-VLOG -> min-max norm
@@ -100,8 +94,6 @@ labels:
   dvlog:
     labels_csv:  C:/Users/user/Documents/data_raw/D-VLOG/labels.csv
 
-merge_policy:
-  prefer_daic_for_overlap: true    # 300–492 overlap 해결
 
 eval:
   threshold: 0.5
