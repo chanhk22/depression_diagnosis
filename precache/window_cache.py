@@ -5,7 +5,8 @@ import yaml
 import numpy as np
 import pandas as pd
 from features.align import make_target_grid, resample_to_target
-from preprocessing.clnf_parser import normalize_landmarks
+from preprocessing.label_mapping import load_labels
+
 
 
 class WindowCacheBuilder:
@@ -15,11 +16,34 @@ class WindowCacheBuilder:
         self.stride = config['windowing']['stride_s']
         self.base_hz = config['windowing']['base_rate_hz']
         self.min_valid_ratio = config['windowing']['min_valid_ratio']
+        self.label_mappings = self._load_all_labels()
 
-    # --------------------------
-    # Top-level entry
-    # --------------------------
-    def build_dataset_cache(self, dataset_name):
+    def _load_all_labels(self):
+        """Load labels for all datasets"""
+        mappings = {}
+        
+        # DAIC-WOZ labels
+        if 'daic_woz' in self.config['labels']:
+            labels_dir = os.path.dirname(self.config['labels']['daic_woz']['train_split'])
+            mappings['DAIC-WOZ'] = load_labels(labels_dir, dataset_hint='DAIC-WOZ')
+            print(f"Loaded {len(mappings['DAIC-WOZ'])} DAIC-WOZ labels")
+        
+        # E-DAIC labels  
+        if 'e_daic' in self.config['labels']:
+            labels_dir = os.path.dirname(self.config['labels']['e_daic']['train_split'])
+            mappings['E-DAIC'] = load_labels(labels_dir, dataset_hint='E-DAIC')
+            print(f"Loaded {len(mappings['E-DAIC'])} E-DAIC labels")
+        
+        # D-VLOG labels (different structure)
+        if 'dvlog' in self.config['labels']:
+            dvlog_labels = pd.read_csv(self.config['labels']['dvlog']['labels_csv'])
+            mappings['D-VLOG'] = self._process_dvlog_labels(dvlog_labels)
+            print(f"Loaded {len(mappings['D-VLOG'])} D-VLOG labels")
+        
+        return mappings
+    
+
+    def _build_dataset_cache(self, dataset_name):
         if dataset_name == "DAIC-WOZ":
             return self._build_daic_cache()
         elif dataset_name == "E-DAIC":
@@ -29,12 +53,10 @@ class WindowCacheBuilder:
         else:
             raise ValueError(f"Unknown dataset: {dataset_name}")
 
-    # --------------------------
     # DAIC-WOZ
-    # --------------------------
     def _build_daic_cache(self):
         proc_root = self.config['outputs']['processed_root']
-        cache_dir = f"{self.config['outputs']['cache_root']}/DAIC-WOZ"
+        cache_dir = os.path.join(self.config['outputs']['cache_root'], "DAIC-WOZ")
         os.makedirs(cache_dir, exist_ok=True)
 
         egemaps_files = glob.glob(f"{proc_root}/DAIC-WOZ/ReEgemaps25LLD/*_egemaps_25lld.csv")
@@ -44,11 +66,11 @@ class WindowCacheBuilder:
             session_id = os.path.basename(egemaps_path).split('_')[0]
             modalities = {"audio": egemaps_path}
 
-            clnf_path = f"{proc_root}/DAIC-WOZ/Features/{session_id}_CLNF_features.csv"
+            clnf_path = f"{proc_root}/DAIC-WOZ/Features/clnf/{session_id}_CLNF_features.txt"
             if os.path.exists(clnf_path):
                 modalities["landmarks"] = clnf_path
 
-            covarep_path = f"{proc_root}/DAIC-WOZ/Features/{session_id}_COVAREP.csv"
+            covarep_path = f"{proc_root}/DAIC-WOZ/Features/covarep/{session_id}_COVAREP.csv"
             if os.path.exists(covarep_path):
                 modalities["covarep"] = covarep_path
 
@@ -64,12 +86,11 @@ class WindowCacheBuilder:
 
         return pd.DataFrame()
 
-    # --------------------------
     # E-DAIC
-    # --------------------------
     def _build_edaic_cache(self):
         proc_root = self.config['outputs']['processed_root']
-        cache_dir = f"{self.config['outputs']['cache_root']}/E-DAIC"
+        cache_dir = os.path.join(self.config['outputs']['cache_root'], "E-DAIC")       
+
         os.makedirs(cache_dir, exist_ok=True)
 
         egemaps_files = glob.glob(f"{proc_root}/E-DAIC/ReEgemaps25LLD/*_egemaps_25lld.csv")
@@ -79,18 +100,10 @@ class WindowCacheBuilder:
             session_id = os.path.basename(egemaps_path).split('_')[0]
             modalities = {"audio": egemaps_path}
 
-            # privileged
-            vgg_path = f"{proc_root}/E-DAIC/Features/{session_id}_vgg16.npz"
-            if os.path.exists(vgg_path): modalities["vgg16"] = vgg_path
-
-            densenet_path = f"{proc_root}/E-DAIC/Features/{session_id}_densenet201.npz"
-            if os.path.exists(densenet_path): modalities["densenet201"] = densenet_path
-
-            openface_path = f"{proc_root}/E-DAIC/Features/{session_id}_openface.npz"
-            if os.path.exists(openface_path): modalities["openface"] = openface_path
-
-            mfcc_path = f"{proc_root}/E-DAIC/Features/{session_id}_MFCC.csv"
-            if os.path.exists(mfcc_path): modalities["mfcc"] = mfcc_path
+            for k in ["densenet201", "mfcc", "openface_pose_gaze_au", "vgg16"]:
+                path = f"{proc_root}/E-DAIC/Features/{k}/{session_id}_{k}.csv"
+                if os.path.exists(path):
+                    modalities[k] = path
 
             session_index = self._build_session_windows_with_privileged(session_id, modalities, cache_dir, "E-DAIC")
             if session_index is not None:
@@ -104,22 +117,20 @@ class WindowCacheBuilder:
 
         return pd.DataFrame()
 
-    # --------------------------
     # D-VLOG
-    # --------------------------
     def _build_dvlog_cache(self):
-        proc_root = self.config['outputs']['processed_root']
-        cache_dir = f"{self.config['outputs']['cache_root']}/D-VLOG"
+        dvlog_root = self.config['paths']['dvlog']['root']
+        cache_dir = os.path.join(self.config['outputs']['cache_root'], "D-VLOG")
         os.makedirs(cache_dir, exist_ok=True)
 
-        acoustic_files = glob.glob(f"{proc_root}/D-VLOG/acoustic/*.npy")
+        acoustic_files = glob.glob(f"{dvlog_root}/acoustic/*.npy")
         all_indices = []
 
         for acoustic_path in acoustic_files:
-            session_id = os.path.splitext(os.path.basename(acoustic_path))[0]
+            session_id = os.path.basename(acoustic_path).split('_')[0]
             modalities = {"audio_npy": acoustic_path}
 
-            visual_path = f"{proc_root}/D-VLOG/visual/{session_id}.npy"
+            visual_path = f"{dvlog_root}/visual/{session_id}.npy"
             if os.path.exists(visual_path):
                 modalities["visual_npy"] = visual_path
 
@@ -134,17 +145,15 @@ class WindowCacheBuilder:
             return combined_df
 
         return pd.DataFrame()
-
-    # --------------------------
+    
     # Session-level windowing
-    # --------------------------
     def _build_session_windows(self, session_id, modalities, cache_dir, dataset_name):
         timeseries = {}
         for mod_name, mod_path in modalities.items():
             if mod_path.endswith('.csv'):
                 timeseries[mod_name] = self._load_csv_timeseries(mod_path)
-            elif mod_path.endswith('.npz'):
-                timeseries[mod_name] = self._load_npz_timeseries(mod_path)
+            elif mod_path.endswith(".txt"):
+                timeseries[mod_name] = self._load_csv_timeseries(mod_path, sep=",")
             else:
                 continue
 
@@ -209,15 +218,11 @@ class WindowCacheBuilder:
         if audio_t is None: return None
 
         privileged_data = {}
-        for priv in ["vgg16","densenet201","openface","mfcc"]:
+        for priv in ["densenet201","mfcc","openface_pose_gaze_au","vgg16"]:
             if priv not in modalities: continue
             p = modalities[priv]
-            if p.endswith('.npz'):
-                npz = np.load(p, allow_pickle=True)
-                feats = npz['feat']
-                times = npz.get('t', np.arange(feats.shape[0]))
-                privileged_data[priv] = (times, feats)
-            elif p.endswith('.csv'):
+            
+            if p.endswith('.csv'):
                 t,x,_ = self._load_csv_timeseries(p)
                 privileged_data[priv] = (t,x)
 
@@ -237,7 +242,7 @@ class WindowCacheBuilder:
                 if priv in ["vgg16","densenet201"]:
                     win_mean = self._get_window_mean(pt, px, w0, w1)
                     if win_mean is not None: win_data[priv] = win_mean.reshape(1,-1)
-                elif priv in ["mfcc","openface"]:
+                elif priv in ["mfcc","openface_pose_gaze_au"]:
                     res = resample_to_target(pt, px, tgt_times)
                     if res is not None: win_data[priv] = res
 
@@ -300,25 +305,57 @@ class WindowCacheBuilder:
             widx+=1; cur+=self.stride
 
         return pd.DataFrame(windows) if windows else None
-
-    # --------------------------
+    
     # Utils
-    # --------------------------
-    def _load_csv_timeseries(self, path):
+    # check if has explicit time column
+    def _load_csv_timeseries(self, path, assume_hop_s=0.01, **read_kwargs):
+        """Load csv file. If no time column, assume fixed hop (e.g., COVAREP).
+        - Accepts extra kwargs (e.g., sep=',') and passes them to read_table_smart.
+        - Robustly parses time columns that may be numeric, strings, or timedeltas."""
         from preprocessing.utils_io import read_table_smart
+
         df, _ = read_table_smart(path)
-        for cand in ['frameTime','timestamp','time','Time']:
+        if df is None or len(df) == 0:
+            return None, None, None
+        
+        for cand in ['frameTime','timestamp',' timestamp', 'time','Time']:
             if cand in df.columns:
-                t=df[cand].astype(float).values
+
+                col = df[cand]
+
+                # 1) 숫자/숫자 문자열 우선 시도
+                t = None
+                try:
+                    t_numeric = pd.to_numeric(col, errors='coerce')
+                    if t_numeric.notna().any():
+                        t = t_numeric.astype(float).values
+                except Exception:
+                    t = None
+
+                # 2) Timedelta/시간 문자열(예: '0 days 00:00:00') 시도
+                if t is None:
+                    try:
+                        td = pd.to_timedelta(col, errors='coerce')
+                        if td.notna().any():
+                            t = td.dt.total_seconds().values
+                    except Exception:
+                        t = None
+
+                # 3) 그래도 실패하면 고정 hop 가정
+                if t is None:
+                    n_frames = len(df)
+                    t = np.arange(n_frames, dtype=float) * assume_hop_s
+
                 x=df.select_dtypes(include=[np.number]).drop(columns=[cand],errors='ignore').values
                 cols=df.select_dtypes(include=[np.number]).drop(columns=[cand],errors='ignore').columns.tolist()
                 return t,x,cols
-        return None,None,None
-
-    def _load_npz_timeseries(self, path):
-        d=np.load(path,allow_pickle=True)
-        f=d['feat']; t=d.get('t',np.arange(f.shape[0])/30.0)
-        return t,f,None
+            
+        #  no explicit time column → assume fixed hop
+        n_frames = len(df)
+        t = np.arange(n_frames) * assume_hop_s
+        x = df.select_dtypes(include=[np.number]).values
+        cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        return t, x, cols
 
     def _get_window_mean(self, t, x, w0, w1):
         if t is None or x is None: return None
@@ -341,10 +378,10 @@ def main():
     if args.dataset=='all':
         for d in ['DAIC-WOZ','E-DAIC','D-VLOG']:
             print(f"Building cache for {d}...")
-            res=builder.build_dataset_cache(d)
+            res=builder._build_dataset_cache(d)
             print(f"✓ {d}: {len(res)} windows")
     else:
-        res=builder.build_dataset_cache(args.dataset)
+        res=builder._build_dataset_cache(args.dataset)
         print(f"✓ {args.dataset}: {len(res)} windows")
 
 
