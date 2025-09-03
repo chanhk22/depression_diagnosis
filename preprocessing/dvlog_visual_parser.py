@@ -1,7 +1,7 @@
 # preprocessing/dvlog_visual_parser.py
 import os
 import numpy as np
-from preprocessing.clnf_parser import normalize_landmarks, interocular_distance
+from .clnf_parser import normalize_landmarks, interocular_distance
 
 def load_dvlog_visual(path):
     """
