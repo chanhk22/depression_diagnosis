@@ -1,4 +1,9 @@
-# preprocessing/clnf_parser.py
+# feature_extract/daicwoz/daic_clnf_parser.py
+
+'''
+raw 데이터를 읽고 68개 점(x,y) 추출 -> 정규화 -> .npy로 저장
+'''
+
 import numpy as np
 import re
 import pandas as pd
@@ -22,7 +27,7 @@ def read_clnf_features_txt(path):
 
     # find time column if present
     time_col = None
-    for cand in ["timestamp","time","frameTime","timeStamp","frame"]:
+    for cand in ["timestamp"," timestamp","time","frameTime","timeStamp","frame"]:
         for c in cols:
             if c.lower() == cand.lower():
                 time_col = c
@@ -112,13 +117,3 @@ def normalize_landmarks(pts, method="interocular"):
         return ((pts - mean) / std).astype(np.float32)
     raise ValueError(f"Unknown normalize method: {method}")
 
-def ear_mar(pts):
-    def eye_ratio(p, idx):
-        v1=np.linalg.norm(p[:,idx[1]]-p[:,idx[5]],axis=1)
-        v2=np.linalg.norm(p[:,idx[2]]-p[:,idx[4]],axis=1)
-        h =np.linalg.norm(p[:,idx[0]]-p[:,idx[3]],axis=1)+1e-6
-        return (v1+v2)/(2*h)
-    EAR=(eye_ratio(pts,IBUG_LEFT_EYE)+eye_ratio(pts, IBUG_RIGHT_EYE))/2
-    p=pts[:,IBUG_MOUTH,:]
-    MAR=np.linalg.norm(p[:,2]-p[:,6],axis=1)/(np.linalg.norm(p[:,0]-p[:,4],axis=1)+1e-6)
-    return EAR, MAR
