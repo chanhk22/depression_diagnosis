@@ -33,7 +33,7 @@ import csv
 # -----------------------------
 # Helpers
 # -----------------------------
-CANDIDATE_TIME_COLS = ["timestamp", "frameTime", "time", "Time", "frame_time"]
+CANDIDATE_TIME_COLS = ["timestamp", " timestamp", "frameTime", "time", "Time", "frame_time"]
 
 def smart_read_csv(path: str) -> pd.DataFrame:
     """Read CSV with auto delimiter sniffing."""
