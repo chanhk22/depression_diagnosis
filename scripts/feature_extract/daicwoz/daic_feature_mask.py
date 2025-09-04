@@ -17,6 +17,11 @@ def mask_clnf_file(txt_in, out_csv, t0):
         out_dir = os.path.dirname(out_csv)
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)  # 디렉토리가 없으면 생성
+
+        # 파일이 이미 존재하면 진행하지 않음
+        if os.path.exists(out_csv):
+            print(f"File already exists, skipping: {out_csv}")
+            return  # 파일이 존재하면 이 파일에 대해 처리를 건너뛰고 종료
         
         with open(txt_in, 'r') as f:
             lines = f.readlines()  # 파일의 모든 라인을 읽어옴
@@ -63,6 +68,11 @@ def mask_covarep_file(csv_in, out_csv, t0):
     out_dir = os.path.dirname(out_csv)
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)  # 디렉토리가 없으면 생성
+
+    # 파일이 이미 존재하면 진행하지 않음
+    if os.path.exists(out_csv):
+        print(f"File already exists, skipping: {out_csv}")
+        return  # 파일이 존재하면 이 파일에 대해 처리를 건너뛰고 종료
 
     df_filtered.to_csv(out_csv, index=False)
 
