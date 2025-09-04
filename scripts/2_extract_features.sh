@@ -10,4 +10,4 @@ python -m scripts.feature_extract.edaic.edaic_feature_mask
 
 # from preprocessing.clnf_parser, preprocessing.dvlog_visual_parser normalize the data and save in processed/features file
 # CLNF_features.txt -> CLNF_features.npy
-python -m scripts.preprocess_landmarks
+python -m scripts.feature_extract.preprocess_landmarks
