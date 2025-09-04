@@ -12,7 +12,6 @@ import os
 
 IBUG_LEFT_EYE  = [36,37,38,39,40,41]
 IBUG_RIGHT_EYE = [42,43,44,45,46,47]
-IBUG_MOUTH = [60,61,62,63,64,65,66,67]
 
 def read_clnf_features_txt(path):
     """
@@ -24,6 +23,14 @@ def read_clnf_features_txt(path):
     """
     df, sep = read_table_smart(path)
     cols = list(df.columns)
+
+    # --- NaN 처리 (여기서 반드시 먼저 적용) ---
+    df = df.replace(['-1.#IND', 'NaN', 'nan', 'NONE', 'none'], np.nan)
+
+    # 숫자형 컬럼 전체 변환
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
 
     # find time column if present
     time_col = None
