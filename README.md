@@ -38,14 +38,21 @@ git clone https://github.com/santi-pdp/pase.git
 
 ### Step 1. Preprocess audio
 + Cut Ellie's speech
-+ Masks silence (VAD)
++ find t0 and save in **t0_values.json**
++ Trim audio file -> cut audio after t0
++ Extract **eGeMAPS (25 LLD)** from trimmed audio file
+
 ```
 bash scripts/1_preprocess_audio.sh
 ```
 
 ### step 2. Extract features
-+ Re-extract **eGeMAPS (25 LLD)** for DAIC/E-DAIC audio files.
-+ Extract **PASE+** (optional)
++ Based on **Based on t0_values.json** file, rematch the features' timeline (cut before t0)
++ Extract file against the new timeline and put in processed file
++ **DAIC-WOZ** : CLNF_features.txt, COVAREP.csv
++ **E-DAIC** : Densenet201, mfcc, openface_pose_gaze_au, vgg16
++ From ```preprocessing.clnf_parser```, ```preprocessing.dvlog_visual_parser``` normalize the data and save in processed/features file
+
 ```
 bash scripts/2_extract_features.sh
 ```
