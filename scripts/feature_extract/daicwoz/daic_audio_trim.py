@@ -25,10 +25,14 @@ def trim_audio():
         wav_in  = os.path.join(AUDIO_IN,  f"{sid}_AUDIO.wav")
         wav_out = os.path.join(PROC_ROOT, "DAIC-WOZ/Audio", f"{sid}_AUDIO_trimmed.wav")
 
+        # 트리밍된 오디오 파일이 이미 존재하는지 확인
+        if os.path.exists(wav_out): 
+            print(f"Trimmed audio already exists for session {sid}: {wav_out}")
+            continue  # 파일이 이미 존재하면 트리밍을 건너뜀
+
         if not os.path.exists(wav_in): 
             print(f"Audio file does not exist: {wav_in}")
             continue
-
         # Ellie start time
         try:
             t0 = find_ellie_start(trs, ELLIE_RGX)
