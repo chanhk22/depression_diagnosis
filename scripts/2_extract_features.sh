@@ -7,3 +7,7 @@ python -m scripts.feature_extract.daicwoz.daic_feature_extract
 
 
 python -m scripts.feature_extract.edaic.edaic_feature_extract
+
+# from preprocessing.clnf_parser, preprocessing.dvlog_visual_parser normalize the data and save in processed/features file
+# CLNF_features.txt -> CLNF_features.npy
+python -m scripts.preprocess_landmarks
