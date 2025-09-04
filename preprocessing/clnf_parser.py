@@ -24,6 +24,7 @@ def read_clnf_features_txt(path):
     df, sep = read_table_smart(path)
     cols = list(df.columns)
 
+    
     # --- NaN 처리 (여기서 반드시 먼저 적용) ---
     df = df.replace(['-1.#IND', 'NaN', 'nan', 'NONE', 'none'], np.nan)
 
@@ -31,6 +32,11 @@ def read_clnf_features_txt(path):
     for col in df.columns:
         if df[col].dtype == object:
             df[col] = pd.to_numeric(df[col], errors='coerce')
+    # NaN 행 삭제 (랜드마크 좌표만 확인해서 삭제)
+    x_cols = [c for c in cols if re.match(r'^(x|X)\d+$', str(c))]
+    y_cols = [c for c in cols if re.match(r'^(y|Y)\d+$', str(c))]
+    if x_cols and y_cols:
+        df = df.dropna(subset=x_cols + y_cols)
 
     # find time column if present
     time_col = None
@@ -41,10 +47,6 @@ def read_clnf_features_txt(path):
                 break
         if time_col is not None:
             break
-
-    # Try to locate x0..x67 / y0..y67 blocks by header names
-    x_cols = [c for c in cols if re.match(r'^(x|X)\d+$', str(c))]
-    y_cols = [c for c in cols if re.match(r'^(y|Y)\d+$', str(c))]
 
     if len(x_cols) == 68 and len(y_cols) == 68:
         # Ensure ordering x0..x67 and y0..y67
