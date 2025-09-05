@@ -44,12 +44,13 @@ class LandmarkPreprocessor:
             np.save(out_path, pts_norm.astype(np.float32))
             print(f"[DAIC CLNF] {fname}: {pts.shape} -> saved {out_path}")
 
-            # 4. remove original .txt
+            '''# 4. remove original .txt
             try:
                 os.remove(in_path)
                 print(f"  removed original {in_path}")
             except Exception as e:
                 print(f"  failed to remove {in_path}: {e}")
+            '''
 
     def process_dvlog(self, method="interocular"):
         """

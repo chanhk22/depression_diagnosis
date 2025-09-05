@@ -136,6 +136,7 @@ def load_labels(labels_dir_or_file, dataset_hint=None, phq_threshold=DEFAULT_PHQ
         print(f"[label_mapping] Warning: No participant ID column found in {dataset_hint}")
         return {}
     
+    
     print(f"[label_mapping] Processing {len(df_all)} rows for {dataset_hint}")
     print(f"[label_mapping] Found columns: {cols}")
     
