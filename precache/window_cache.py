@@ -8,7 +8,6 @@ from features.align import make_target_grid, resample_to_target
 from preprocessing.label_mapping import load_labels
 
 
-
 class WindowCacheBuilder:
     def __init__(self, config):
         self.config = config
@@ -16,10 +15,12 @@ class WindowCacheBuilder:
         self.stride = config['windowing']['stride_s']
         self.base_hz = config['windowing']['base_rate_hz']
         self.min_valid_ratio = config['windowing']['min_valid_ratio']
+        
+        # Load all labels at initialization
         self.label_mappings = self._load_all_labels()
 
     def _load_all_labels(self):
-        """Load labels for all datasets"""
+        """Load labels for all datasets using the improved label_mapping.py"""
         mappings = {}
         
         # DAIC-WOZ labels
@@ -41,8 +42,8 @@ class WindowCacheBuilder:
             except Exception as e:
                 print(f"Failed to load E-DAIC labels: {e}")
                 mappings['E-DAIC'] = {}
-
-        # D-VLOG labels (different structure)
+        
+        # D-VLOG labels (single file structure)
         if 'dvlog' in self.config['labels']:
             dvlog_labels_path = self.config['labels']['dvlog']['labels_csv']
             try:
@@ -53,20 +54,69 @@ class WindowCacheBuilder:
                 mappings['D-VLOG'] = {}
         
         return mappings
-    
+
     def _get_session_labels(self, session_id, dataset_name):
-        """Get labels for a specific session"""
+        """Get labels for a specific session with robust type handling"""
         if dataset_name not in self.label_mappings:
             return None, None, None, None
         
-        labels = self.label_mappings[dataset_name].get(str(session_id), {})
-        return (
-            labels.get('PHQ_Score'),
-            labels.get('PHQ_Binary'), 
-            labels.get('Gender'),
-            labels.get('Fold')  # For D-VLOG
-        )
-    
+        labels_dict = self.label_mappings[dataset_name]
+        
+        # Try to find session
+        search_ids = [str(session_id), session_id]
+        try:
+            if str(session_id).isdigit():
+                search_ids.extend([int(session_id), str(int(session_id))])
+        except ValueError:
+            pass
+        
+        labels = None
+        for search_id in search_ids:
+            if search_id in labels_dict:
+                labels = labels_dict[search_id]
+                break
+        
+        if labels is None:
+            return None, None, None, None
+        
+        # Extract labels with fallback logic
+        phq_score = labels.get('PHQ_Score')
+        phq_binary = labels.get('PHQ_Binary')
+        gender = labels.get('Gender') 
+        fold = labels.get('Fold')
+        
+        # Fallback: check raw_row for alternative columns
+        raw_row = labels.get('raw_row', {})
+        
+        # If PHQ_Score is None/NaN, try PHQ8_Score
+        if phq_score is None or (isinstance(phq_score, float) and np.isnan(phq_score)):
+            alt_score = raw_row.get('PHQ8_Score')
+            if alt_score is not None and not (isinstance(alt_score, float) and np.isnan(alt_score)):
+                phq_score = float(alt_score)
+        
+        # If PHQ_Binary is None/NaN, try PHQ8_Binary or derive from score
+        if phq_binary is None or (isinstance(phq_binary, float) and np.isnan(phq_binary)):
+            alt_binary = raw_row.get('PHQ8_Binary')
+            if alt_binary is not None and not (isinstance(alt_binary, float) and np.isnan(alt_binary)):
+                phq_binary = float(alt_binary)
+            elif phq_score is not None and not np.isnan(phq_score):
+                # Derive binary from score (threshold = 10)
+                phq_binary = 1.0 if phq_score >= 10.0 else 0.0
+        
+        # Ensure we have a valid binary label
+        if phq_binary is None or (isinstance(phq_binary, float) and np.isnan(phq_binary)):
+            # Last resort: use any available score/binary from raw_row
+            for key in ['PHQ_Binary', 'PHQ_Score']:
+                val = raw_row.get(key)
+                if val is not None and not (isinstance(val, float) and np.isnan(val)):
+                    if key == 'PHQ_Binary':
+                        phq_binary = float(val)
+                    elif key == 'PHQ_Score' and phq_binary is None:
+                        phq_binary = 1.0 if float(val) >= 10.0 else 0.0
+                    break
+        
+        return phq_score, phq_binary, gender, fold
+
     def _build_dataset_cache(self, dataset_name):
         if dataset_name == "DAIC-WOZ":
             return self._build_daic_cache()
@@ -90,7 +140,7 @@ class WindowCacheBuilder:
 
         for egemaps_path in egemaps_files:
             session_id = os.path.basename(egemaps_path).split('_')[0]
-
+            
             # Get labels for this session
             phq_score, phq_binary, gender, fold = self._get_session_labels(session_id, "DAIC-WOZ")
             if phq_binary is None:
@@ -99,10 +149,12 @@ class WindowCacheBuilder:
             
             modalities = {"audio": egemaps_path}
 
-            clnf_path = f"{proc_root}/DAIC-WOZ/Features/clnf/{session_id}_CLNF_features.npy"
+            # Add visual features if available
+            clnf_path = f"{proc_root}/DAIC-WOZ/Features/clnf/{session_id}_CLNF_features.txt"
             if os.path.exists(clnf_path):
                 modalities["landmarks"] = clnf_path
 
+            # Add COVAREP features if available
             covarep_path = f"{proc_root}/DAIC-WOZ/Features/covarep/{session_id}_COVAREP.csv"
             if os.path.exists(covarep_path):
                 modalities["covarep"] = covarep_path
@@ -111,7 +163,6 @@ class WindowCacheBuilder:
                 session_id, modalities, cache_dir, "DAIC-WOZ", 
                 phq_score, phq_binary, gender, fold
             )
-
             if session_index is not None and not session_index.empty:
                 all_indices.append(session_index)
                 print(f"  Session {session_id}: {len(session_index)} windows")
@@ -128,7 +179,6 @@ class WindowCacheBuilder:
     def _build_edaic_cache(self):
         proc_root = self.config['outputs']['processed_root']
         cache_dir = os.path.join(self.config['outputs']['cache_root'], "E-DAIC")       
-
         os.makedirs(cache_dir, exist_ok=True)
 
         egemaps_files = glob.glob(f"{proc_root}/E-DAIC/ReEgemaps25LLD/*_egemaps_25lld.csv")
@@ -138,15 +188,16 @@ class WindowCacheBuilder:
 
         for egemaps_path in egemaps_files:
             session_id = os.path.basename(egemaps_path).split('_')[0]
-
+            
             # Get labels for this session
             phq_score, phq_binary, gender, fold = self._get_session_labels(session_id, "E-DAIC")
             if phq_binary is None:
                 print(f"Skipping E-DAIC session {session_id}: no labels")
                 continue
-
+            
             modalities = {"audio": egemaps_path}
 
+            # Add privileged features if available
             for k in ["densenet201", "mfcc", "openface_pose_gaze_au", "vgg16"]:
                 path = f"{proc_root}/E-DAIC/Features/{k}/{session_id}_{k}.csv"
                 if os.path.exists(path):
@@ -156,7 +207,6 @@ class WindowCacheBuilder:
                 session_id, modalities, cache_dir, "E-DAIC", 
                 phq_score, phq_binary, gender, fold
             )
-            
             if session_index is not None and not session_index.empty:
                 all_indices.append(session_index)
                 print(f"  Session {session_id}: {len(session_index)} windows")
@@ -182,15 +232,16 @@ class WindowCacheBuilder:
 
         for acoustic_path in acoustic_files:
             session_id = os.path.basename(acoustic_path).split('_')[0] if '_' in os.path.basename(acoustic_path) else os.path.splitext(os.path.basename(acoustic_path))[0]
-
+            
             # Get labels for this session
             phq_score, phq_binary, gender, fold = self._get_session_labels(session_id, "D-VLOG")
             if phq_binary is None:
                 print(f"Skipping D-VLOG session {session_id}: no labels")
                 continue
-
+            
             modalities = {"audio_npy": acoustic_path}
 
+            # Add visual features if available
             visual_path = f"{dvlog_root}/visual/{session_id}.npy"
             if os.path.exists(visual_path):
                 modalities["visual_npy"] = visual_path
@@ -199,7 +250,6 @@ class WindowCacheBuilder:
                 session_id, modalities, cache_dir, 
                 phq_score, phq_binary, gender, fold
             )
-
             if session_index is not None and not session_index.empty:
                 all_indices.append(session_index)
                 print(f"  Session {session_id}: {len(session_index)} windows")
@@ -218,14 +268,15 @@ class WindowCacheBuilder:
         """Build windows for DAIC-WOZ (basic features)"""
         timeseries = {}
         for mod_name, mod_path in modalities.items():
-            if mod_path.endswith('.csv'):
+            if mod_path.endswith('.csv') or mod_path.endswith('.txt'):
                 timeseries[mod_name] = self._load_csv_timeseries(mod_path)
-            elif mod_path.endswith(".txt"):
-                timeseries[mod_name] = self._load_csv_timeseries(mod_path)
+            elif mod_path.endswith('.npy'):
+                timeseries[mod_name] = self._load_npy_timeseries(mod_path)
             else:
+                print(f"    Unsupported file type: {mod_path}")
                 continue
 
-        # pick base timeline (prefer audio)
+        # Pick base timeline (prefer audio)
         base_timeline = None
         if "audio" in timeseries and timeseries["audio"][0] is not None:
             base_timeline = timeseries["audio"][0]
@@ -238,8 +289,8 @@ class WindowCacheBuilder:
         if base_timeline is None:
             print(f"  No valid timeline found for session {session_id}")
             return None
-        
-        # window loop
+
+        # Window loop
         t_start, t_end = float(base_timeline[0]), float(base_timeline[-1])
         windows, widx, cur = [], 0, t_start
 
@@ -258,10 +309,12 @@ class WindowCacheBuilder:
                     if mod_name == "audio": 
                         valid_audio = resampled.shape[0]
 
+            # Check minimum valid ratio
             if valid_audio < int(self.min_valid_ratio * self.window_len * self.base_hz):
                 cur += self.stride
                 continue
 
+            # Save window data
             win_path = f"{cache_dir}/{session_id}_w{widx:05d}.npz"
             np.savez_compressed(win_path, **{k: v for k,v in window_data.items() if v is not None})
 
@@ -278,7 +331,7 @@ class WindowCacheBuilder:
                 "gender": gender if gender is not None else "Unknown",
                 "fold": fold if fold is not None else "Unknown"
             }
-
+            
             # Add modality length info
             for k, v in window_data.items():
                 window_meta[f"len_{k}"] = v.shape[0] if v is not None else 0
@@ -306,7 +359,7 @@ class WindowCacheBuilder:
             p = modalities[priv]
             
             if p.endswith('.csv'):
-                t,x,_ = self._load_csv_timeseries(p)
+                t, x, _ = self._load_csv_timeseries(p)
                 if t is not None and x is not None:
                     privileged_data[priv] = (t, x)
 
@@ -325,15 +378,14 @@ class WindowCacheBuilder:
 
             # Build window data
             win_data = {"audio": audio_res}
-
+            
             # Add privileged features
-            for priv,(pt,px) in privileged_data.items():
+            for priv, (pt, px) in privileged_data.items():
                 if priv in ["vgg16","densenet201"]:
                     # CNN features: use window mean (1-step features)
                     win_mean = self._get_window_mean(pt, px, w0, w1)
                     if win_mean is not None: 
                         win_data[priv] = win_mean.reshape(1, -1)
-
                 elif priv in ["mfcc","openface_pose_gaze_au"]:
                     # Sequence features: resample to target timeline
                     res = resample_to_target(pt, px, tgt_times)
@@ -343,8 +395,8 @@ class WindowCacheBuilder:
             # Save window data
             win_path = f"{cache_dir}/{session_id}_w{widx:05d}.npz"
             np.savez_compressed(win_path, **win_data)
-
-            # create window metadata with labels
+            
+            # Create window metadata with labels
             window_meta = {
                 "session": session_id,
                 "dataset": dataset_name,
@@ -357,6 +409,7 @@ class WindowCacheBuilder:
                 "gender": gender if gender is not None else "Unknown",
                 "fold": fold if fold is not None else "Unknown"
             }
+            
             # Add modality length info
             for k, v in win_data.items():
                 window_meta[f"len_{k}"] = v.shape[0] if hasattr(v, 'shape') else 0
@@ -376,7 +429,7 @@ class WindowCacheBuilder:
         except Exception as e:
             print(f"  Failed to load audio for session {session_id}: {e}")
             return None
-        
+
         # Load visual data if available
         visual = None
         if "visual_npy" in modalities:
@@ -387,31 +440,31 @@ class WindowCacheBuilder:
             except Exception as e:
                 print(f"  Failed to load visual for session {session_id}: {e}")
 
-        audio_dur = audio.shape[0]/self.base_hz
-        windows,widx,cur = [],0,0.0
+        audio_dur = audio.shape[0] / self.base_hz
+        windows, widx, cur = [], 0, 0.0
 
         while cur + self.window_len <= audio_dur:
-            w0,w1 = cur,cur+self.window_len
-            s,e = int(w0*self.base_hz), int(w1*self.base_hz)
+            w0, w1 = cur, cur + self.window_len
+            s, e = int(w0 * self.base_hz), int(w1 * self.base_hz)
             audio_win = audio[s:e]
-
+            
             # Check minimum valid ratio
-            if audio_win.shape[0] < int(self.min_valid_ratio*self.window_len*self.base_hz):
-                cur+=self.stride
+            if audio_win.shape[0] < int(self.min_valid_ratio * self.window_len * self.base_hz):
+                cur += self.stride
                 continue
 
-            win_data={"audio":audio_win}
-
+            win_data = {"audio": audio_win}
+            
             # Add visual data if available
             if visual is not None:
-                vis_hz=self.config['preprocessing']['resample']['vis_hz']
-                vs,ve=int(w0*vis_hz), int(w1*vis_hz)
-                ve=min(ve,visual.shape[0])
-
-                if vs<visual.shape[0]:
-                    v_win=visual[vs:ve]
-                    if v_win.shape[0]>0:
-                        # Interpolate visual to match timeline
+                vis_hz = self.config['preprocessing']['resample']['vis_hz']
+                vs, ve = int(w0 * vis_hz), int(w1 * vis_hz)
+                ve = min(ve, visual.shape[0])
+                
+                if vs < visual.shape[0]:
+                    v_win = visual[vs:ve]
+                    if v_win.shape[0] > 0:
+                        # Interpolate visual to match audio timeline
                         try:
                             from scipy.interpolate import interp1d
                             st = np.linspace(0, self.window_len, v_win.shape[0])
@@ -427,8 +480,7 @@ class WindowCacheBuilder:
             # Save window data
             win_path = f"{cache_dir}/{session_id}_w{widx:05d}.npz"
             np.savez_compressed(win_path, **win_data)
-
-
+            
             # Create window metadata with labels
             window_meta = {
                 "session": session_id,
@@ -444,18 +496,16 @@ class WindowCacheBuilder:
                 "len_audio": audio_win.shape[0],
                 "len_landmarks": win_data.get("landmarks", np.array([])).shape[0]
             }
+
             windows.append(window_meta)
             widx += 1
             cur += self.stride
 
         return pd.DataFrame(windows) if windows else None
     
-    # Utils
-    # check if has explicit time column
+    # Utility functions
     def _load_csv_timeseries(self, path, assume_hop_s=0.01, **read_kwargs):
-        """Load csv file. If no time column, assume fixed hop (e.g., COVAREP).
-        - Accepts extra kwargs (e.g., sep=',') and passes them to read_table_smart.
-        - Robustly parses time columns that may be numeric, strings, or timedeltas."""
+        """Load csv file with robust time column parsing"""
         from preprocessing.utils_io import read_table_smart
 
         try:
@@ -580,5 +630,5 @@ def main():
             print(f"✗ {args.dataset}: Error occurred - {e}")
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()

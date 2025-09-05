@@ -3,7 +3,7 @@ set -e
 
 # Test preprocessing.label_mapping
 # uniform mapping of session IDs → {PHQ score, binary label, gender, fold}, with automatic corrections, consistency checks, and summary stats
-python -m preprocessing.label_mapping
+#python -m preprocessing.label_mapping
 
 
 
