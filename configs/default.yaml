@@ -89,7 +89,6 @@ labels:
     train_split: C:/Users/user/Documents/data_raw/E-DAIC/labels/train_split.csv
     dev_split:   C:/Users/user/Documents/data_raw/E-DAIC/labels/dev_split.csv
     test_split:  C:/Users/user/Documents/data_raw/E-DAIC/labels/test_split.csv
-    detailed:    C:/Users/user/Documents/data_raw/E-DAIC/labels/Detailed_PHQ8_Labels.csv
 
   dvlog:
     labels_csv:  C:/Users/user/Documents/data_raw/D-VLOG/labels.csv
