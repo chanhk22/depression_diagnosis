@@ -420,56 +420,61 @@ class WindowCacheBuilder:
 
         return pd.DataFrame(windows) if windows else None
 
+    
     def _build_dvlog_session_windows(self, session_id, modalities, cache_dir, 
-                                   phq_score, phq_binary, gender, fold):
-        """Build windows for D-VLOG (pre-extracted numpy arrays)"""
-        # Load audio data
+                                 phq_score, phq_binary, gender, fold):
+        """Build windows for D-VLOG (pre-extracted numpy arrays) with padding for short audio"""
+        # Load audio
         try:
             audio = np.load(modalities["audio_npy"])
         except Exception as e:
             print(f"  Failed to load audio for session {session_id}: {e}")
             return None
 
-        # Load visual data if available
+        # Load visual if exists
         visual = None
         if "visual_npy" in modalities:
             try:
                 visual = np.load(modalities["visual_npy"])
-                if visual.ndim == 3: 
+                if visual.ndim == 3:
                     visual = visual.reshape(visual.shape[0], -1)
             except Exception as e:
                 print(f"  Failed to load visual for session {session_id}: {e}")
 
-        audio_dur = audio.shape[0] / self.base_hz
+        audio_len = audio.shape[0]
         windows, widx, cur = [], 0, 0.0
+        min_win_samples = int(self.min_valid_ratio * self.window_len * self.base_hz)
 
-        while cur + self.window_len <= audio_dur:
+        while cur < audio_len / self.base_hz:
             w0, w1 = cur, cur + self.window_len
             s, e = int(w0 * self.base_hz), int(w1 * self.base_hz)
+
+            # Clip to audio length
+            e = min(e, audio_len)
             audio_win = audio[s:e]
-            
-            # Check minimum valid ratio
-            if audio_win.shape[0] < int(self.min_valid_ratio * self.window_len * self.base_hz):
-                cur += self.stride
-                continue
+
+            # Pad if last window is too short
+            if audio_win.shape[0] < min_win_samples:
+                pad_len = min_win_samples - audio_win.shape[0]
+                audio_win = np.pad(audio_win, ((0, pad_len), (0, 0)), mode='constant')
 
             win_data = {"audio": audio_win}
-            
-            # Add visual data if available
+
+            # Visual interpolation/padding
             if visual is not None:
                 vis_hz = self.config['preprocessing']['resample']['vis_hz']
                 vs, ve = int(w0 * vis_hz), int(w1 * vis_hz)
                 ve = min(ve, visual.shape[0])
-                
                 if vs < visual.shape[0]:
                     v_win = visual[vs:ve]
-                    if v_win.shape[0] > 0:
-                        # Interpolate visual to match audio timeline
+                    # Interpolate or pad to match audio_win length
+                    interp_len = audio_win.shape[0]
+                    if v_win.shape[0] != interp_len:
                         try:
                             from scipy.interpolate import interp1d
                             st = np.linspace(0, self.window_len, v_win.shape[0])
-                            tt = np.linspace(0, self.window_len, audio_win.shape[0])
-                            v_interp = np.zeros((audio_win.shape[0], v_win.shape[1]))
+                            tt = np.linspace(0, self.window_len, interp_len)
+                            v_interp = np.zeros((interp_len, v_win.shape[1]))
                             for i in range(v_win.shape[1]):
                                 f = interp1d(st, v_win[:, i], kind='linear', fill_value='extrapolate')
                                 v_interp[:, i] = f(tt)
@@ -477,17 +482,17 @@ class WindowCacheBuilder:
                         except Exception as e:
                             print(f"    Visual interpolation failed for window {widx}: {e}")
 
-            # Save window data
+            # Save window
             win_path = f"{cache_dir}/{session_id}_w{widx:05d}.npz"
             np.savez_compressed(win_path, **win_data)
-            
-            # Create window metadata with labels
+
+            # Metadata
             window_meta = {
                 "session": session_id,
                 "dataset": "D-VLOG",
                 "w": widx,
                 "t0": w0,
-                "t1": w1,
+                "t1": min(w1, audio_len / self.base_hz),
                 "path": win_path,
                 "y_reg": phq_score if phq_score is not None else 0.0,
                 "y_bin": phq_binary if phq_binary is not None else 0.0,
@@ -501,7 +506,12 @@ class WindowCacheBuilder:
             widx += 1
             cur += self.stride
 
+            # Stop if last window has reached end
+            if cur >= audio_len / self.base_hz:
+                break
+
         return pd.DataFrame(windows) if windows else None
+
     
     # Utility functions
     def _load_csv_timeseries(self, path, assume_hop_s=0.01, **read_kwargs):
