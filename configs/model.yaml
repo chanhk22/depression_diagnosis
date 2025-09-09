@@ -1,20 +1,64 @@
 teacher:
-  audio_dim: 25
-  vis_dim: 136
-  vgg_dim: 4096
-  densenet_dim: 1920
-  face_feat_dim: 49                  # 예시(실제 OpenFace csv 기준으로 맞춰야 함)
-  hidden: 128
-  lstm_layers: 2
-  attn_heads: 4
-  dropout: 0.2
-  fusion: "cross_attn+transformer"
+  audio_dim: 25              # eGeMAPS 25 LLD features
+  vis_dim: 136               # Landmarks: 68 points * 2 coordinates
+  vgg_dim: 4096              # VGG16 fc2 features
+  densenet_dim: 1920         # DenseNet201 features  
+  face_feat_dim: 49          # OpenFace pose/gaze/AUs (adjust based on actual data)
+  hidden: 128                # LSTM hidden size
+  lstm_layers: 2             # Number of LSTM layers
+  attn_heads: 8              # Multi-head attention heads
+  dropout: 0.2               # Dropout rate
+  fusion: "cross_attn"       # Fusion method: cross_attn, transformer, concat
 
 student:
-  audio_dim: 25
-  vis_dim: 136                 # audio-only면 무시
-  hidden: 128
-  lstm_layers: 2
-  attn_heads: 4
-  dropout: 0.2
-  use_landmarks: false         # 배포버전: false
+  audio_dim: 25              # Same as teacher for audio
+  vis_dim: 136               # Landmarks (optional for student)
+  hidden: 128                # Same hidden size as teacher
+  lstm_layers: 2             # Same architecture depth
+  attn_heads: 8              # Same attention configuration
+  dropout: 0.2               # Same dropout
+  use_landmarks: false       # Set to true for audio+visual student
+
+# Model variations for different experiments
+teacher_variants:
+  audio_only:
+    audio_dim: 25
+    hidden: 128
+    lstm_layers: 2
+    dropout: 0.2
+    
+  multimodal:
+    audio_dim: 25
+    vis_dim: 136
+    hidden: 128
+    lstm_layers: 2
+    attn_heads: 8
+    dropout: 0.2
+    
+  full_privileged:
+    audio_dim: 25
+    vis_dim: 136
+    vgg_dim: 4096
+    densenet_dim: 1920
+    face_feat_dim: 49
+    hidden: 128
+    lstm_layers: 2
+    attn_heads: 8
+    dropout: 0.2
+
+student_variants:
+  audio_only:
+    audio_dim: 25
+    hidden: 128
+    lstm_layers: 2
+    dropout: 0.2
+    use_landmarks: false
+    
+  audio_visual:
+    audio_dim: 25
+    vis_dim: 136
+    hidden: 128
+    lstm_layers: 2
+    attn_heads: 8
+    dropout: 0.2
+    use_landmarks: true

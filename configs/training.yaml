@@ -1,22 +1,99 @@
 train:
   seed: 42
-  batch_size: 32
-  epochs: 40
-  lr: 2.0e-4
+  batch_size: 16             # Reduced for memory efficiency with privileged features
+  epochs: 50                 # Increased for better convergence
+  lr: 1.0e-4                 # Slightly lower learning rate for stability  
   weight_decay: 1.0e-4
   grad_clip: 1.0
   num_workers: 4
-  mixed_precision: true
+  mixed_precision: true      # Enable for memory efficiency
+  
+  # Learning rate scheduling
+  lr_scheduler: "cosine"     # Options: cosine, step, plateau
+  warmup_epochs: 5
+  
+  # Early stopping
+  patience: 10
+  min_delta: 1e-4
 
+# Loss function weights
 loss_weights:
-  reg_lambda: 0.3
-  kd_lambda: 0.5
-  mmd_lambda: 0.5
-  grl_lambda: 0.5
+  reg_lambda: 0.3            # Weight for regression loss in multitask
+  kd_lambda: 0.5             # Weight for knowledge distillation loss
+  mmd_lambda: 0.1            # Weight for MMD domain adaptation loss  
+  grl_lambda: 0.1            # Weight for gradient reversal loss
 
+# Knowledge Distillation parameters
+kd:
+  T: 3.0                     # Temperature for KD (higher = softer)
+  alpha: 0.7                 # Weight for KD loss vs task loss
+
+# Domain Adaptation parameters
 da:
   use_mmd: true
   use_grl: true
+  lambda_schedule: "fixed"    # Options: fixed, linear, exponential
+  max_lambda: 1.0
+  
+# Data augmentation (if implemented)
+augmentation:
+  noise_std: 0.01            # Gaussian noise standard deviation
+  time_stretch: false        # Time stretching augmentation
+  freq_mask: false           # Frequency masking
+  
+# Regularization
+regularization:
+  label_smoothing: 0.1       # Label smoothing for classification
+  mixup_alpha: 0.0           # Mixup augmentation (0 = disabled)
+  
+# Validation and logging
+validation:
+  eval_every: 1              # Evaluate every N epochs
+  save_best_only: true
+  
+logging:
+  log_every: 50              # Log every N batches
+  tensorboard: true
+  wandb: false               # Set to true if using Weights & Biases
+  
+# Checkpoint settings  
+checkpointing:
+  save_every: 5              # Save checkpoint every N epochs
+  keep_best_k: 3             # Keep top K checkpoints
+  
+# Hardware settings
+hardware:
+  device: "auto"             # auto, cuda, cpu
+  pin_memory: true
+  non_blocking: true
 
-kd:
-  T: 2.0
+# Experiment variants
+experiments:
+  teacher_baseline:
+    train:
+      batch_size: 16
+      lr: 1.0e-4
+      epochs: 50
+    loss_weights:
+      reg_lambda: 0.3
+      
+  student_kd:
+    train:
+      batch_size: 24         # Larger batch for student (less memory)
+      lr: 2.0e-4             # Higher LR for student
+      epochs: 40
+    loss_weights:
+      kd_lambda: 0.7
+      reg_lambda: 0.3
+      
+  domain_adaptation:
+    train:
+      batch_size: 12         # Smaller for DA (two domains)
+      lr: 5.0e-5             # Lower LR for fine-tuning
+      epochs: 30
+    da:
+      use_mmd: true
+      use_grl: true
+    loss_weights:
+      mmd_lambda: 0.2
+      grl_lambda: 0.1

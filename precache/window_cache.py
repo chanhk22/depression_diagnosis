@@ -15,7 +15,7 @@ class WindowCacheBuilder:
         self.stride = config['windowing']['stride_s']
         self.base_hz = config['windowing']['base_rate_hz']
         self.min_valid_ratio = config['windowing']['min_valid_ratio']
-        
+
         # Load all labels at initialization
         self.label_mappings = self._load_all_labels()
 
@@ -138,6 +138,8 @@ class WindowCacheBuilder:
 
         print(f"Processing {len(egemaps_files)} DAIC-WOZ audio files...")
 
+        processed_count = 0
+
         for egemaps_path in egemaps_files:
             session_id = os.path.basename(egemaps_path).split('_')[0]
             
@@ -150,22 +152,29 @@ class WindowCacheBuilder:
             modalities = {"audio": egemaps_path}
 
             # Add visual features if available
-            clnf_path = f"{proc_root}/DAIC-WOZ/Features/clnf/{session_id}_CLNF_features.txt"
+            clnf_path = f"{proc_root}/DAIC-WOZ/Features/clnf/{session_id}_CLNF_features.npy"
             if os.path.exists(clnf_path):
                 modalities["landmarks"] = clnf_path
+            print(f"    Found CLNF landmarks for {session_id}: {os.path.basename(clnf_path)}")
 
             # Add COVAREP features if available
             covarep_path = f"{proc_root}/DAIC-WOZ/Features/covarep/{session_id}_COVAREP.csv"
             if os.path.exists(covarep_path):
                 modalities["covarep"] = covarep_path
 
-            session_index = self._build_session_windows(
-                session_id, modalities, cache_dir, "DAIC-WOZ", 
-                phq_score, phq_binary, gender, fold
-            )
-            if session_index is not None and not session_index.empty:
-                all_indices.append(session_index)
-                print(f"  Session {session_id}: {len(session_index)} windows")
+            try:
+                session_index = self._build_session_windows(
+                    session_id, modalities, cache_dir, "DAIC-WOZ", 
+                    phq_score, phq_binary, gender, fold
+                )
+                if session_index is not None and not session_index.empty:
+                    all_indices.append(session_index)
+                    processed_count += 1
+                    print(f"  ✓ Session {session_id}: {len(session_index)} windows")
+                else:
+                    print(f"  ✗ Session {session_id}: no valid windows")
+            except Exception as e:
+                print(f"  ✗ Session {session_id}: error - {e}")
 
         if all_indices:
             combined_df = pd.concat(all_indices, ignore_index=True)
@@ -186,6 +195,8 @@ class WindowCacheBuilder:
 
         print(f"Processing {len(egemaps_files)} E-DAIC audio files...")
 
+        processed_count = 0
+
         for egemaps_path in egemaps_files:
             session_id = os.path.basename(egemaps_path).split('_')[0]
             
@@ -202,14 +213,21 @@ class WindowCacheBuilder:
                 path = f"{proc_root}/E-DAIC/Features/{k}/{session_id}_{k}.csv"
                 if os.path.exists(path):
                     modalities[k] = path
+                    print(f"    Found {k}: {path}")
 
-            session_index = self._build_session_windows_with_privileged(
-                session_id, modalities, cache_dir, "E-DAIC", 
-                phq_score, phq_binary, gender, fold
-            )
-            if session_index is not None and not session_index.empty:
-                all_indices.append(session_index)
-                print(f"  Session {session_id}: {len(session_index)} windows")
+            try:
+                session_index = self._build_session_windows_with_privileged(
+                    session_id, modalities, cache_dir, "E-DAIC", 
+                    phq_score, phq_binary, gender, fold
+                )
+                if session_index is not None and not session_index.empty:
+                    all_indices.append(session_index)
+                    processed_count += 1
+                    print(f"  ✓ Session {session_id}: {len(session_index)} windows")
+                else:
+                    print(f"  ✗ Session {session_id}: no valid windows")
+            except Exception as e:
+                print(f"  ✗ Session {session_id}: error - {e}")
 
         if all_indices:
             combined_df = pd.concat(all_indices, ignore_index=True)
@@ -230,29 +248,43 @@ class WindowCacheBuilder:
 
         print(f"Processing {len(acoustic_files)} D-VLOG acoustic files...")
 
+
+        processed_count = 0
+
         for acoustic_path in acoustic_files:
-            session_id = os.path.basename(acoustic_path).split('_')[0] if '_' in os.path.basename(acoustic_path) else os.path.splitext(os.path.basename(acoustic_path))[0]
+            # Extract session ID correctly - FIXED
+            filename = os.path.basename(acoustic_path)
+            if filename.endswith('_acoustic.npy'):
+                session_id = filename.replace('_acoustic.npy', '')
+            else:
+                session_id = os.path.splitext(filename)[0]
             
-            # Get labels for this session
             phq_score, phq_binary, gender, fold = self._get_session_labels(session_id, "D-VLOG")
             if phq_binary is None:
-                print(f"Skipping D-VLOG session {session_id}: no labels")
+                print(f"  Skipping session {session_id}: no labels")
                 continue
             
             modalities = {"audio_npy": acoustic_path}
 
             # Add visual features if available
-            visual_path = f"{dvlog_root}/visual/{session_id}.npy"
+            visual_path = f"{dvlog_root}/visual/{session_id}_visual.npy"
             if os.path.exists(visual_path):
                 modalities["visual_npy"] = visual_path
+                print(f"    Found visual: {visual_path}")
 
-            session_index = self._build_dvlog_session_windows(
-                session_id, modalities, cache_dir, 
-                phq_score, phq_binary, gender, fold
-            )
-            if session_index is not None and not session_index.empty:
-                all_indices.append(session_index)
-                print(f"  Session {session_id}: {len(session_index)} windows")
+            try:
+                session_index = self._build_dvlog_session_windows(
+                    session_id, modalities, cache_dir, 
+                    phq_score, phq_binary, gender, fold
+                )
+                if session_index is not None and not session_index.empty:
+                    all_indices.append(session_index)
+                    processed_count += 1
+                    print(f"  ✓ Session {session_id}: {len(session_index)} windows")
+                else:
+                    print(f"  ✗ Session {session_id}: no valid windows")
+            except Exception as e:
+                print(f"  ✗ Session {session_id}: error - {e}")
 
         if all_indices:
             combined_df = pd.concat(all_indices, ignore_index=True)
@@ -269,12 +301,20 @@ class WindowCacheBuilder:
         timeseries = {}
         for mod_name, mod_path in modalities.items():
             if mod_path.endswith('.csv') or mod_path.endswith('.txt'):
-                timeseries[mod_name] = self._load_csv_timeseries(mod_path)
+                t, x, cols = self._load_csv_timeseries_with_cleanup(mod_path, mod_name)
+                timeseries[mod_name] = (t, x, cols)
+
             elif mod_path.endswith('.npy'):
-                timeseries[mod_name] = self._load_npy_timeseries(mod_path)
+                # landmarks CLNF or DVLOG visual
+                x = np.load(mod_path)
+                if x.ndim == 3 and x.shape[2] == 2:  # (T,68,2) → (T,136)
+                    x = x.reshape(x.shape[0], -1)
+                t = np.arange(len(x), dtype=float) / float(self.base_hz)
+                cols = [f"lm_{i}" for i in range(x.shape[1])]
+                timeseries[mod_name] = (t, x.astype(np.float32), cols)
             else:
                 print(f"    Unsupported file type: {mod_path}")
-                continue
+                timeseries[mod_name] = (None, None, None)
 
         # Pick base timeline (prefer audio)
         base_timeline = None
@@ -346,8 +386,12 @@ class WindowCacheBuilder:
                                              phq_score, phq_binary, gender, fold):
         """Build windows for E-DAIC (with privileged features)"""
         # Load audio timeline
-        audio_t, audio_x, _ = self._load_csv_timeseries(modalities["audio"])
-        if audio_t is None: 
+        audio_entry = modalities.get("audio")
+        if audio_entry is None:
+            print(f"  No audio modality for session {session_id}")
+            return None
+        audio_t, audio_x, _ = self._load_csv_timeseries_with_cleanup(audio_entry, "audio")
+        if audio_t is None:
             print(f"  No valid audio timeline for session {session_id}")
             return None
 
@@ -359,9 +403,10 @@ class WindowCacheBuilder:
             p = modalities[priv]
             
             if p.endswith('.csv'):
-                t, x, _ = self._load_csv_timeseries(p)
+                t, x, cols = self._load_csv_timeseries_with_cleanup(p, priv)
                 if t is not None and x is not None:
-                    privileged_data[priv] = (t, x)
+                    privileged_data[priv] = (t, x, cols)
+                    print(f"    Loaded {priv}: {x.shape}")
 
         t_start, t_end = float(audio_t[0]), float(audio_t[-1])
         windows, widx, cur = [], 0, t_start
@@ -379,17 +424,14 @@ class WindowCacheBuilder:
             # Build window data
             win_data = {"audio": audio_res}
             
-            # Add privileged features
-            for priv, (pt, px) in privileged_data.items():
-                if priv in ["vgg16","densenet201"]:
-                    # CNN features: use window mean (1-step features)
+            for priv, (pt, px, pcols) in privileged_data.items():
+                if priv in ["vgg16", "densenet201"]:
                     win_mean = self._get_window_mean(pt, px, w0, w1)
-                    if win_mean is not None: 
+                    if win_mean is not None:
                         win_data[priv] = win_mean.reshape(1, -1)
-                elif priv in ["mfcc","openface_pose_gaze_au"]:
-                    # Sequence features: resample to target timeline
+                elif priv in ["mfcc", "openface_pose_gaze_au"]:
                     res = resample_to_target(pt, px, tgt_times)
-                    if res is not None: 
+                    if res is not None:
                         win_data[priv] = res
 
             # Save window data
@@ -436,8 +478,9 @@ class WindowCacheBuilder:
         if "visual_npy" in modalities:
             try:
                 visual = np.load(modalities["visual_npy"])
-                if visual.ndim == 3:
+                if visual.ndim == 3: 
                     visual = visual.reshape(visual.shape[0], -1)
+                print(f"    Loaded visual: {visual.shape}")
             except Exception as e:
                 print(f"  Failed to load visual for session {session_id}: {e}")
 
@@ -465,6 +508,7 @@ class WindowCacheBuilder:
                 vis_hz = self.config['preprocessing']['resample']['vis_hz']
                 vs, ve = int(w0 * vis_hz), int(w1 * vis_hz)
                 ve = min(ve, visual.shape[0])
+
                 if vs < visual.shape[0]:
                     v_win = visual[vs:ve]
                     # Interpolate or pad to match audio_win length
@@ -481,7 +525,15 @@ class WindowCacheBuilder:
                             win_data["landmarks"] = v_interp.astype(np.float32)
                         except Exception as e:
                             print(f"    Visual interpolation failed for window {widx}: {e}")
-
+                    else:
+                        # direct pad/trim
+                        if v_win.shape[0] < interp_len:
+                            pad_rows = interp_len - v_win.shape[0]
+                            v_pad = np.pad(v_win, ((0, pad_rows), (0, 0)), mode='edge')
+                            win_data["landmarks"] = v_pad.astype(np.float32)
+                        else:
+                            win_data["landmarks"] = v_win[:interp_len].astype(np.float32)
+                            
             # Save window
             win_path = f"{cache_dir}/{session_id}_w{widx:05d}.npz"
             np.savez_compressed(win_path, **win_data)
@@ -512,10 +564,36 @@ class WindowCacheBuilder:
 
         return pd.DataFrame(windows) if windows else None
 
-    
-    # Utility functions
-    def _load_csv_timeseries(self, path, assume_hop_s=0.01, **read_kwargs):
-        """Load csv file with robust time column parsing"""
+    def _load_npy_timeseries(self, path, assume_hop_s=0.01):
+        """Load landmarks from .npy file"""
+        try:
+            landmarks = np.load(path)
+            
+            if landmarks.ndim == 3 and landmarks.shape[1] == 68 and landmarks.shape[2] == 2:
+                # (T, 68, 2) -> (T, 136)
+                landmarks = landmarks.reshape(landmarks.shape[0], -1)
+            elif landmarks.ndim == 2 and landmarks.shape[1] == 136:
+                # Already (T, 136)
+                pass
+            else:
+                print(f"    Unexpected landmark shape in {path}: {landmarks.shape}")
+                return None, None, None
+            
+            # Create time axis
+            n_frames = landmarks.shape[0]
+            t = np.arange(n_frames, dtype=float) * assume_hop_s
+            
+            # Create column names for landmarks
+            cols = [f"x{i}" for i in range(68)] + [f"y{i}" for i in range(68)]
+            
+            return t, landmarks, cols
+            
+        except Exception as e:
+            print(f"    Failed to load .npy file {path}: {e}")
+            return None, None, None
+        
+    def _load_csv_timeseries_with_cleanup(self, path, modality_type):
+        """Load CSV with metadata column cleanup for privileged features"""
         from preprocessing.utils_io import read_table_smart
 
         try:
@@ -526,48 +604,50 @@ class WindowCacheBuilder:
             print(f"    Failed to read {path}: {e}")
             return None, None, None
         
-        # Try to find time column
-        time_candidates = ['frameTime', 'timestamp', ' timestamp', 'time', 'Time']
+        # Clean metadata columns based on modality type
+        if modality_type == "openface_pose_gaze_au":
+            # Remove frame, timestamp, confidence, success
+            drop_cols = ['frame', 'timestamp', 'confidence', 'success']
+            df_clean = df.drop(columns=[c for c in drop_cols if c in df.columns], errors='ignore')
+        elif modality_type in ["vgg16", "densenet201"]:
+            # Remove name, timeStamp
+            drop_cols = ['name', 'timeStamp']
+            df_clean = df.drop(columns=[c for c in drop_cols if c in df.columns], errors='ignore')
+        else:
+            df_clean = df
+        
+        # Find time column
+        time_candidates = ['frameTime', 'timestamp', ' timestamp', 'time', 'Time', 'timeStamp']
         t = None
         time_col = None
         
         for cand in time_candidates:
-            if cand in df.columns:
-                time_col = cand
+            if cand in df.columns:  # Use original df for time
+                
                 col = df[cand]
-
-                # Try numeric conversion first
+                
                 try:
                     t_numeric = pd.to_numeric(col, errors='coerce')
                     if t_numeric.notna().any():
                         t = t_numeric.astype(float).values
-                        break
-                except Exception:
-                    pass
-
-                # Try timedelta conversion
-                try:
-                    td = pd.to_timedelta(col, errors='coerce')
-                    if td.notna().any():
-                        t = td.dt.total_seconds().values
+                        time_col = cand
                         break
                 except Exception:
                     pass
 
         # If no time column found, create synthetic time
         if t is None:
-            n_frames = len(df)
-            t = np.arange(n_frames, dtype=float) * assume_hop_s
+            n_frames = len(df_clean)
+            t = np.arange(n_frames, dtype=float) * 0.01
 
-        # Extract numeric features (excluding time column)
-        if time_col:
-            x = df.select_dtypes(include=[np.number]).drop(columns=[time_col], errors='ignore').values
-            cols = df.select_dtypes(include=[np.number]).drop(columns=[time_col], errors='ignore').columns.tolist()
-        else:
-            x = df.select_dtypes(include=[np.number]).values
-            cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        # Extract numeric features from cleaned df
+        x = df_clean.select_dtypes(include=[np.number]).values
+        cols = df_clean.select_dtypes(include=[np.number]).columns.tolist()
 
+        print(f"    {modality_type}: {df.shape} -> {x.shape} (removed metadata)")
         return t, x, cols
+    
+    
 
     def _get_window_mean(self, t, x, w0, w1):
         """Get mean features within window time range"""

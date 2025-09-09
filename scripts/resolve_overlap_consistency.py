@@ -195,9 +195,7 @@ def main():
         resolution_df.to_csv(output_file, index=False)
         print(f"\n✅ Resolution rules saved to: {output_file}")
         
-        print(f"\n⚠️  Recommendation:")
-        print(f"   Apply these rules before running data_split_manager.py")
-        print(f"   Or use separate training strategy to avoid data leakage")
+
         
     else:
         print("✅ No inconsistencies found! Safe to proceed with joint training.")

@@ -1,160 +1,179 @@
 # training/data_split_manager.py
-import pandas as pd
-import numpy as np
 import os
-from sklearn.model_selection import train_test_split
-from preprocessing.label_mapping import load_labels
+import yaml
+import argparse
+import pandas as pd
+
+from scripts.resolve_overlap_consistency import main as resolve_overlap_main
+from scripts.apply_overlap_resolution import (
+    apply_resolution_to_window_cache,
+    create_consistent_splits
+
+)
+from scripts.create_edaic_splits_clean import create_edaic_splits_from_original
+
 
 class DataSplitManager:
-    def __init__(self, config):
-        self.config = config
-        self.cache_root = config['outputs']['cache_root']
+    def __init__(self, config_path="configs/default.yaml"):
+        with open(config_path, "r", encoding="utf-8") as f:
+            self.config = yaml.safe_load(f)
+        self.cache_root = self.config["outputs"]["cache_root"]
         
-    def create_unified_splits(self):
-        """Create unified train/val/test splits across DAIC-WOZ and E-DAIC"""
-        print(self.config['labels']['daic_woz'])
-        # 1. Load all cached indices
-        daic_idx = self._load_dataset_index("DAIC-WOZ")
-        edaic_idx = self._load_dataset_index("E-DAIC") 
-        dvlog_idx = self._load_dataset_index("D-VLOG")
+
+    '''def _check_existing_splits(self, dataset):
+        """Check if splits already exist for dataset"""
+        split_dir = os.path.join(self.cache_root, dataset, "splits")
+        if not os.path.exists(split_dir):
+            return False
+        files = [
+            os.path.join(split_dir, f"{s}_index.csv") for s in ["train", "dev", "test"]
+        ]
+        return all(os.path.exists(f) for f in files)'''
+
+    def create_daic_edaic_splits(self, dataset):
+        """Run overlap resolution + create splits for DAIC-WOZ / E-DAIC"""
         
-        # 2. Load labels for DAIC + E-DAIC
-        daic_labels = load_labels(self.config['labels']['daic_woz'])
-        edaic_labels = load_labels(self.config['labels']['e_daic'])
+        '''if self._check_existing_splits(dataset):
+            print(f"ℹ️ {dataset} splits already exist. Skipping.")
+            return'''
+
+        print(f"\n=== Resolving {dataset} Overlaps and Creating Splits ===")
+
+        # Step 1: Overlap resolution only once for DAIC-WOZ+E-DAIC
+        if dataset == "DAIC-WOZ":
+            resolve_overlap_main()
+            if apply_resolution_to_window_cache():
+                create_consistent_splits()
+        elif dataset == "E-DAIC":
+            create_edaic_splits_from_original()
+
+    def create_dvlog_splits(self):
+        """Create splits for D-VLOG: use fold if available, else random"""
         
-        # 3. Merge indices with labels
-        daic_merged = self._merge_with_labels(daic_idx, daic_labels, "DAIC-WOZ")
-        edaic_merged = self._merge_with_labels(edaic_idx, edaic_labels, "E-DAIC")
-        
-        # 4. Combine DAIC + E-DAIC for supervised learning
-        supervised_df = pd.concat([daic_merged, edaic_merged], ignore_index=True)
-        
-        # 5. Stratified split by depression + gender
-        train_df, test_df = self._stratified_split(
-            supervised_df, test_size=0.2, random_state=42
-        )
-        train_df, val_df = self._stratified_split(
-            train_df, test_size=0.2, random_state=42  # 0.64/0.16/0.2 split
-        )
-        
-        # 6. Add D-VLOG as unlabeled domain adaptation data
-        dvlog_merged = self._prepare_dvlog(dvlog_idx)
-        
-        # 7. Save splits
-        splits = {
-            'train': train_df,
-            'val': val_df,
-            'test': test_df,
-            'dvlog_unlabeled': dvlog_merged
-        }
-        
-        for split_name, df in splits.items():
-            out_path = f"{self.cache_root}/unified_{split_name}_index.csv"
-            df.to_csv(out_path, index=False)
-            print(f"Saved {split_name}: {len(df)} samples -> {out_path}")
-        
-        return splits
-    
-    def _load_dataset_index(self, dataset_name):
-        """Load concatenated index for a dataset"""
-        idx_path = f"{self.cache_root}/{dataset_name}/{dataset_name}_all_index.csv"
-        if os.path.exists(idx_path):
-            return pd.read_csv(idx_path)
+        '''if self._check_existing_splits("D-VLOG"):
+            print("ℹ️ D-VLOG splits already exist. Skipping.")
+            return'''
+
+        index_path = os.path.join(self.cache_root, "D-VLOG", "D-VLOG_all_index.csv")
+        if not os.path.exists(index_path):
+            print("❌ No D-VLOG index found")
+            return
+
+        df = pd.read_csv(index_path)
+        sessions = df["session"].unique()
+        print(f"Loaded {len(df)} windows from {len(sessions)} sessions in D-VLOG")
+
+        splits_dir = os.path.join(self.cache_root, "D-VLOG", "splits")
+        os.makedirs(splits_dir, exist_ok=True)
+
+        if "fold" in df.columns:
+            print("ℹ️ Using existing fold assignments in D-VLOG index")
+            for split_name in ["train", "valid", "test"]:
+                split_df = df[df["fold"].str.lower() == split_name].copy()
+                if not split_df.empty:
+                    out_path = os.path.join(splits_dir, f"{split_name}_index.csv")
+                    split_df.to_csv(out_path, index=False)
+                    print(
+                        f"  {split_name:5}: {len(split_df):5,} windows, {split_df['session'].nunique()} sessions"
+                    )
         else:
-            # Fallback: concat individual session indices
-            session_indices = []
-            for f in os.listdir(f"{self.cache_root}/{dataset_name}"):
-                if f.endswith("_index.csv") and not f.endswith("_all_index.csv"):
-                    df = pd.read_csv(f"{self.cache_root}/{dataset_name}/{f}")
-                    df['dataset'] = dataset_name
-                    session_indices.append(df)
-            return pd.concat(session_indices, ignore_index=True) if session_indices else pd.DataFrame()
-    
-    def _merge_with_labels(self, index_df, label_dict, dataset_name):
-        """Merge window index with labels"""
-        if index_df.empty:
-            return index_df
-        
-        # Add labels to each window
-        index_df['dataset'] = dataset_name
-        index_df['y_bin'] = None
-        index_df['y_reg'] = None
-        index_df['gender'] = None
-        
-        for idx, row in index_df.iterrows():
-            session_id = str(row['session'])
-            if session_id in label_dict:
-                labels = label_dict[session_id]
-                index_df.at[idx, 'y_bin'] = labels.get('PHQ_Binary')
-                index_df.at[idx, 'y_reg'] = labels.get('PHQ_Score')
-                index_df.at[idx, 'gender'] = labels.get('Gender')
-        
-        # Filter out samples without labels
-        return index_df.dropna(subset=['y_bin']).reset_index(drop=True)
-    
-    def _prepare_dvlog(self, dvlog_idx):
-        """Prepare D-VLOG as unlabeled data for domain adaptation"""
-        if dvlog_idx.empty:
-            return dvlog_idx
-        
-        dvlog_labels = pd.read_csv(self.config['labels']['dvlog']['labels_csv'])
-        merged = dvlog_idx.merge(dvlog_labels, left_on='session', right_on='index', how='inner')
-        
-        # Binary conversion for D-VLOG
-        merged['y_bin'] = (merged['label'] == 'depression').astype(int)
-        merged['y_reg'] = 0.0  # No PHQ scores in D-VLOG
-        merged['dataset'] = 'D-VLOG'
-        
-        return merged[['session', 'w', 't0', 't1', 'path', 'y_bin', 'y_reg', 'dataset']]
-    
-    def _stratified_split(self, df, test_size=0.2, random_state=42):
-        """Stratified split by depression + gender"""
-        # Create stratification key
-        df['strat_key'] = df['y_bin'].astype(str) + '_' + df['gender'].fillna('Unknown')
-        
-        # Session-level split (not window-level to avoid data leakage)
-        sessions = df.groupby('session').first().reset_index()
-        
-        train_sessions, test_sessions = train_test_split(
-            sessions['session'].values,
-            test_size=test_size,
-            random_state=random_state,
-            stratify=sessions['strat_key'].values
-        )
-        
-        train_df = df[df['session'].isin(train_sessions)].copy()
-        test_df = df[df['session'].isin(test_sessions)].copy()
-        
-        return train_df.drop('strat_key', axis=1), test_df.drop('strat_key', axis=1)
+            print("ℹ️ No fold column found, using random split instead")
 
-# Usage script
+            # Stratified by y_bin if available
+            if "y_bin" in df.columns:
+                dep_sessions = df[df["y_bin"] == 1]["session"].unique()
+                nondep_sessions = df[df["y_bin"] == 0]["session"].unique()
+            else:
+                dep_sessions, nondep_sessions = sessions, []
+
+            # Simple split ratio 64/16/20
+            def split_sessions(sessions, ratio=(0.64, 0.16, 0.20)):
+                import numpy as np
+
+                sessions = np.array(sessions)
+                np.random.shuffle(sessions)
+                n = len(sessions)
+                n_train = int(ratio[0] * n)
+                n_dev = int(ratio[1] * n)
+                return (
+                    sessions[:n_train],
+                    sessions[n_train : n_train + n_dev],
+                    sessions[n_train + n_dev :],
+                )
+
+            train_s, dev_s, test_s = split_sessions(sessions)
+
+            split_map = {
+                "train": train_s,
+                "dev": dev_s,
+                "test": test_s,
+            }
+
+            for split_name, sess_ids in split_map.items():
+                split_df = df[df["session"].isin(sess_ids)].copy()
+                out_path = os.path.join(splits_dir, f"{split_name}_index.csv")
+                split_df.to_csv(out_path, index=False)
+                print(
+                    f"  {split_name:5}: {len(split_df):5,} windows, {split_df['session'].nunique()} sessions"
+                )
+
+        
+
+    def create_combined_splits(self, datasets=None, output_name="combined"):
+        """Combine splits across datasets (default: DAIC-WOZ + E-DAIC)"""
+        if datasets is None:
+            datasets = ["DAIC-WOZ", "E-DAIC"]
+
+        combined_dir = os.path.join(self.cache_root, output_name, "splits")
+        '''if os.path.exists(combined_dir):
+            print(f"ℹ️ Combined splits already exist in {combined_dir}. Skipping.")
+            return'''
+
+        print(f"\n=== Creating combined splits from {datasets} ===")
+
+        os.makedirs(combined_dir, exist_ok=True)
+
+        for split_name in ["train", "dev", "test"]:
+            frames = []
+            for dataset in datasets:
+                split_path = os.path.join(
+                    self.cache_root, dataset, "splits", f"{split_name}_index.csv"
+                )
+                if os.path.exists(split_path):
+                    frames.append(pd.read_csv(split_path))
+            if frames:
+                combined = pd.concat(frames, ignore_index=True)
+                combined.to_csv(
+                    os.path.join(combined_dir, f"{split_name}_index.csv"), index=False
+                )
+                print(
+                    f"  {split_name:5}: {len(combined):5,} windows, {combined['session'].nunique()} sessions"
+                )
+
+
 def main():
-    import yaml
-    with open("configs/default.yaml", encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    # 경로 변환: 환경 변수 치환
-    def expand_paths(config):
-        for section in config:
-            if isinstance(config[section], dict):
-                for key, value in config[section].items():
-                    if isinstance(value, str) and "${" in value:
-                        config[section][key] = os.path.expandvars(value)
-                    elif isinstance(value, dict):
-                        expand_paths(config[section])  # 재귀적으로 처리
-        return config
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="configs/default.yaml")
+    parser.add_argument(
+        "--dataset", choices=["DAIC-WOZ", "E-DAIC", "D-VLOG"], help="Create splits for a specific dataset"
+    )
+    parser.add_argument("--create-combined", action="store_true")
+    args = parser.parse_args()
 
-# 경로 치환
-    config = expand_paths(config)
-    
-    manager = DataSplitManager(config)
-    splits = manager.create_unified_splits()
-    
-    print("Data split summary:")
-    for name, df in splits.items():
-        if not df.empty:
-            print(f"{name}: {len(df)} windows, {df['session'].nunique()} sessions")
-            if 'y_bin' in df.columns:
-                print(f"  Depression ratio: {df['y_bin'].mean():.3f}")
+    manager = DataSplitManager(args.config)
+
+    if args.dataset == "DAIC-WOZ":
+        manager.create_daic_edaic_splits("DAIC-WOZ")
+    elif args.dataset == "E-DAIC":
+        manager.create_daic_edaic_splits("E-DAIC")
+    elif args.dataset == "D-VLOG":
+        manager.create_dvlog_splits()
+
+    if args.create_combined:
+        manager.create_combined_splits()
+
+    print("\n=== Split creation completed ===")
+
 
 if __name__ == "__main__":
     main()
