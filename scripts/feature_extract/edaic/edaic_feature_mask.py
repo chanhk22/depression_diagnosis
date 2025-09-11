@@ -43,6 +43,8 @@ def process_files():
             filename = os.path.basename(csv_in)
             sid = filename.split("_")[0]   # 예: "490_P_xxx.csv" -> "490"
 
+            #출력 파일명을 feature_subdir 이름 그대로
+            out_filename = f"{sid}_{feature_subdir}.csv"
             out_csv = os.path.join(out_dir, filename)
 
             # 이미 처리된 파일 건너뜀
